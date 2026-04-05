@@ -93,7 +93,8 @@ vlc-playlist-generator-gui
 The repository includes a supported PyInstaller build path for producing a
 standalone Windows GUI executable. Maintainer-facing build steps live in
 [docs/maintainer-guide.md](docs/maintainer-guide.md). Validation details for
-the build helper live in [docs/testing.md](docs/testing.md).
+the build helper live in [docs/testing.md](docs/testing.md). Tagged builds also
+publish the generated `.exe` files to GitHub Releases.
 
 ## Supported Audio Formats
 

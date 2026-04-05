@@ -58,8 +58,10 @@ spec files. Those generated directories are ignored by git.
 
 For repository automation, [`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
 runs the tests on `windows-latest`, builds both executables, and uploads the
-resulting `.exe` files as a GitHub Actions artifact. Use that workflow when you
-need a Windows-built artifact from CI instead of a local machine.
+resulting `.exe` files as a GitHub Actions artifact. When the workflow runs from
+a tag matching `v*`, it also publishes the same executables to GitHub Releases.
+Use the Actions artifact for branch validation and the Release asset for a
+versioned public download.
 
 ## Code Scope
 

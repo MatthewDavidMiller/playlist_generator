@@ -26,4 +26,5 @@ Use the repository documentation as the primary reference before making changes.
   validation details in `docs/testing.md` rather than duplicating them in
   multiple places.
 - Keep GitHub Actions workflow behavior aligned with the documented Windows
-  build process in [docs/maintainer-guide.md](docs/maintainer-guide.md).
+  build process and release publishing notes in
+  [docs/maintainer-guide.md](docs/maintainer-guide.md).

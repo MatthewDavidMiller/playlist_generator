@@ -106,7 +106,8 @@ GitHub Actions workflow
 provides the Windows-side validation that cannot be completed from Linux or
 macOS alone. It installs the optional build dependency, runs `pytest` on
 `windows-latest`, builds both executables, and uploads `dist/*.exe` as an
-artifact.
+artifact. For tag pushes matching `v*`, the same workflow also attaches the
+generated `.exe` files to the corresponding GitHub Release.
 
 ## Git Hook Behavior
 
