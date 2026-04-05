@@ -58,7 +58,7 @@ python -m playlist_generator.windows_build --dry-run
 To verify the pinned Windows CI dependency set locally, use:
 
 ```bash
-pip-audit --strict -r requirements/windows-ci-lock.txt
+python -m pip_audit --strict -r requirements/windows-ci-lock.txt
 ```
 
 ## What Each Command Covers
@@ -113,12 +113,13 @@ actual executable produced by PyInstaller is platform-specific, so a Windows
 GitHub Actions workflow
 [`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
 provides the Windows-side validation that cannot be completed from Linux or
-macOS alone. The read-only build job installs the pinned dependency set from
+macOS alone. The read-only build job runs for tag pushes matching `v*` and for
+manual dispatches, installs the pinned dependency set from
 [requirements/windows-ci-lock.txt](../requirements/windows-ci-lock.txt), runs
-`pip-audit --strict`, executes `pytest` on `windows-latest`, builds both
-executables, and uploads `dist/*.exe` as an artifact. For tag pushes matching
-`v*`, a separate publish job rebuilds the executables from the same pinned
-inputs and attaches them to the corresponding GitHub Release.
+`python -m pip_audit --strict`, executes `pytest` on `windows-latest`, builds
+both executables, and uploads `dist/*.exe` as an artifact. For tag pushes
+matching `v*`, a separate publish job downloads that artifact and attaches the
+same `.exe` files to the corresponding GitHub Release.
 
 ## Git Hook Behavior
 

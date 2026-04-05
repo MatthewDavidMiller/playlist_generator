@@ -57,13 +57,13 @@ The command writes output to `dist/` and uses `build/pyinstaller/` for work and
 spec files. Those generated directories are ignored by git.
 
 For repository automation, [`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
-uses a read-only Windows build job to install the pinned dependency set from
-[`requirements/windows-ci-lock.txt`](../requirements/windows-ci-lock.txt), run
-`pip-audit`, execute the tests, build both executables, and upload the
-resulting `.exe` files as a GitHub Actions artifact. A separate tag-only job
-with `contents: write` rebuilds the executables from the same pinned inputs and
-publishes them to GitHub Releases. Use the Actions artifact for branch
-validation and the Release asset for a versioned public download.
+uses a read-only Windows build job for tag pushes matching `v*` and manual
+dispatches. That job installs the pinned dependency set from
+[`requirements/windows-ci-lock.txt`](../requirements/windows-ci-lock.txt), runs
+`python -m pip_audit`, executes the tests, builds both executables, and uploads
+the resulting `.exe` files as a GitHub Actions artifact. A separate tag-only
+job with `contents: write` reuses that artifact and publishes it to GitHub
+Releases.
 
 ## Code Scope
 
