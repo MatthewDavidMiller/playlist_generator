@@ -18,10 +18,14 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.11.0",
 ]
+windows-build = [
+    "pyinstaller>=6.19.0",
+]
 
 [project.scripts]
 vlc-playlist-generator = "playlist_generator.cli:main"
 vlc-playlist-generator-gui = "playlist_generator.gui:main"
+vlc-playlist-generator-build-windows = "playlist_generator.windows_build:main"
 
 [tool.setuptools]
 packages = ["playlist_generator"]

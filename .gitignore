@@ -15,6 +15,7 @@
 *.py[cod]
 *.pyd
 *.pyo
+*.spec
 *$py.class
 __pycache__/
 build/

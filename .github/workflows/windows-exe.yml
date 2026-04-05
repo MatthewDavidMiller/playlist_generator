@@ -1,0 +1,39 @@
+name: Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install project dependencies
+        run: |
+          py -m pip install --upgrade pip
+          py -m pip install -e ".[dev,windows-build]"
+
+      - name: Run test suite
+        run: py -m pytest
+
+      - name: Build Windows executables
+        run: py -m playlist_generator.windows_build --target both --clean
+
+      - name: Upload Windows executables
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-executables
+          path: dist/*.exe
+          if-no-files-found: error

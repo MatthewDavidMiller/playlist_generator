@@ -11,6 +11,7 @@ Windows, macOS, and Linux.
 - Deterministic, testable playlist generation logic in a shared core module.
 - Command-line interface for scripting and automation.
 - Tkinter desktop GUI for local interactive use.
+- Windows executable build support through PyInstaller.
 - UTF-8 `.m3u8` output with absolute paths for VLC compatibility.
 - Linting, formatting, tests, and git commit hooks for the Python codebase.
 
@@ -48,6 +49,12 @@ To install the development tooling as well:
 python3 -m pip install -e ".[dev]"
 ```
 
+To install the Windows executable build tooling in the active environment:
+
+```bash
+python3 -m pip install -e ".[windows-build]"
+```
+
 ## CLI Usage
 
 ```bash
@@ -80,6 +87,13 @@ Or, after installation:
 ```bash
 vlc-playlist-generator-gui
 ```
+
+## Windows EXE
+
+The repository includes a supported PyInstaller build path for producing a
+standalone Windows GUI executable. Maintainer-facing build steps live in
+[docs/maintainer-guide.md](docs/maintainer-guide.md). Validation details for
+the build helper live in [docs/testing.md](docs/testing.md).
 
 ## Supported Audio Formats
 
@@ -116,6 +130,8 @@ No extra special file is added after a trailing partial block.
 - `playlist_generator/core.py`: shared playlist generation logic.
 - `playlist_generator/cli.py`: command-line entrypoint.
 - `playlist_generator/gui.py`: Tkinter GUI entrypoint.
+- `playlist_generator/windows_build.py`: Windows executable build helper.
+- `scripts/`: PyInstaller launcher entrypoints for Windows packaging.
 - `tests/`: pytest-discovered automated tests.
 - `docs/`: maintainer-oriented project documentation.
 

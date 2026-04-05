@@ -22,3 +22,8 @@ Use the repository documentation as the primary reference before making changes.
   in the same change.
 - Validate Python changes with the commands documented in
   [docs/testing.md](docs/testing.md#validation-commands).
+- Keep Windows executable build workflow in `docs/maintainer-guide.md` and
+  validation details in `docs/testing.md` rather than duplicating them in
+  multiple places.
+- Keep GitHub Actions workflow behavior aligned with the documented Windows
+  build process in [docs/maintainer-guide.md](docs/maintainer-guide.md).

@@ -24,6 +24,13 @@ the active environment:
 python3 -m pip install -e ".[dev]"
 ```
 
+If you need to build Windows executables from the repository, also install the
+optional packaging dependency:
+
+```bash
+python3 -m pip install -e ".[windows-build]"
+```
+
 The local hook configuration currently invokes tools through `.venv/bin/python`.
 If you use a different environment layout, either activate `.venv` or update
 [.pre-commit-config.yaml](../.pre-commit-config.yaml) so hook execution matches
@@ -38,6 +45,12 @@ python3 -m ruff check .
 python3 -m ruff format --check .
 python3 -m pytest
 python3 -m pre_commit run --all-files
+```
+
+For the Windows packaging helper, use:
+
+```bash
+python3 -m playlist_generator.windows_build --dry-run
 ```
 
 ## What Each Command Covers
@@ -70,6 +83,7 @@ from [pyproject.toml](../pyproject.toml). The suite currently covers:
 
 - Shared playlist generation behavior in `tests/test_playlist_generator.py`.
 - CLI behavior and failure handling in `tests/test_cli.py`.
+- Windows packaging command construction in `tests/test_windows_build.py`.
 
 Coverage reporting is enabled by default through the pytest configuration.
 
@@ -77,6 +91,22 @@ Coverage reporting is enabled by default through the pytest configuration.
 
 Executes the same pipeline enforced by the git hook across the full repository.
 Use this before a commit when you want to confirm hook behavior explicitly.
+
+### `playlist_generator.windows_build --dry-run`
+
+Prints the resolved PyInstaller command line without invoking the packager. This
+is the repository-safe validation step for packaging logic on any platform. The
+actual executable produced by PyInstaller is platform-specific, so a Windows
+`.exe` must still be built on Windows.
+
+## CI Coverage
+
+GitHub Actions workflow
+[`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
+provides the Windows-side validation that cannot be completed from Linux or
+macOS alone. It installs the optional build dependency, runs `pytest` on
+`windows-latest`, builds both executables, and uploads `dist/*.exe` as an
+artifact.
 
 ## Git Hook Behavior
 
