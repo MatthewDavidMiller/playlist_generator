@@ -74,6 +74,10 @@ The CLI prints the output path followed by a JSON summary with:
 - `playlist_entry_count`
 - `insert_every`
 
+Generated playlists store absolute local filesystem paths for VLC
+compatibility. Sharing a playlist can expose your directory structure and may
+not work on another machine.
+
 ## GUI Usage
 
 Run the Tkinter application:

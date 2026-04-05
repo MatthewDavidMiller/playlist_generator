@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from playlist_generator import cli
+from playlist_generator.core import PlaylistValidationError
 
 
 def test_cli_main_writes_playlist_and_prints_summary(
@@ -68,3 +71,54 @@ def test_cli_main_returns_error_code_when_playlist_generation_fails(
 
     assert exit_code == 1
     assert "does not exist" in captured.err
+
+
+def test_cli_main_returns_error_code_for_expected_playlist_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    def raise_validation_error(**_: object) -> None:
+        raise PlaylistValidationError("bad input")
+
+    monkeypatch.setattr(cli, "create_vlc_playlist", raise_validation_error)
+
+    exit_code = cli.main(
+        [
+            "--source-directory",
+            "music",
+            "--special-file",
+            "station-id.mp3",
+            "--insert-every",
+            "2",
+            "--output-path",
+            "playlist.m3u8",
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.err.strip() == "bad input"
+
+
+def test_cli_main_propagates_unexpected_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_runtime_error(**_: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "create_vlc_playlist", raise_runtime_error)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        cli.main(
+            [
+                "--source-directory",
+                "music",
+                "--special-file",
+                "station-id.mp3",
+                "--insert-every",
+                "2",
+                "--output-path",
+                "playlist.m3u8",
+            ]
+        )

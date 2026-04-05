@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import os
 import random
 import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
+import playlist_generator.core as core
 from playlist_generator.core import (
+    PlaylistIOError,
+    PlaylistValidationError,
     build_interval_playlist_entries,
     create_vlc_playlist,
     get_audio_files,
+    write_m3u8_playlist,
 )
 
 
@@ -124,7 +131,7 @@ class CreateVlcPlaylistTests(unittest.TestCase):
             output_path = base / "playlist.m3u8"
 
             with self.assertRaisesRegex(
-                ValueError, "No supported audio files were found"
+                PlaylistValidationError, "No supported audio files were found"
             ):
                 create_vlc_playlist(
                     source_directory=source_directory,
@@ -132,6 +139,53 @@ class CreateVlcPlaylistTests(unittest.TestCase):
                     insert_every=3,
                     output_path=output_path,
                 )
+
+
+def test_create_vlc_playlist_rejects_unsupported_special_file_extension(
+    tmp_path: Path,
+) -> None:
+    source_directory = tmp_path / "music"
+    source_directory.mkdir()
+    (source_directory / "song-01.mp3").touch()
+
+    special_file = tmp_path / "station-id.txt"
+    special_file.touch()
+    output_path = tmp_path / "playlist.m3u8"
+
+    with pytest.raises(PlaylistValidationError, match="supported audio extension"):
+        create_vlc_playlist(
+            source_directory=source_directory,
+            special_file=special_file,
+            insert_every=2,
+            output_path=output_path,
+        )
+
+
+def test_write_m3u8_playlist_keeps_existing_output_when_replace_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    track = tmp_path / "song-01.mp3"
+    output_path = tmp_path / "playlist.m3u8"
+    track.touch()
+    output_path.write_text("existing output\n", encoding="utf-8")
+
+    temp_paths: list[Path] = []
+
+    def fail_replace(
+        source: os.PathLike[str] | str, destination: os.PathLike[str] | str
+    ) -> None:
+        temp_paths.append(Path(source))
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(core.os, "replace", fail_replace)
+
+    with pytest.raises(PlaylistIOError, match="Unable to write playlist"):
+        write_m3u8_playlist([track], output_path)
+
+    assert output_path.read_text(encoding="utf-8") == "existing output\n"
+    assert temp_paths
+    assert all(not temp_path.exists() for temp_path in temp_paths)
 
 
 if __name__ == "__main__":

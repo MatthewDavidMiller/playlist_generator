@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 
-from .core import create_vlc_playlist
+from .core import PlaylistGeneratorError, create_vlc_playlist
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             insert_every=args.insert_every,
             output_path=args.output_path,
         )
-    except Exception as error:
+    except PlaylistGeneratorError as error:
         print(str(error), file=sys.stderr)
         return 1
 

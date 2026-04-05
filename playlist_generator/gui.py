@@ -2,11 +2,110 @@
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
+import traceback
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .core import create_vlc_playlist
+from .core import PlaylistGeneratorError, PlaylistResult, create_vlc_playlist
+
+ABSOLUTE_PATH_WARNING = (
+    "Generated playlists store absolute local file paths. Sharing them may expose "
+    "your directory structure and the playlist may not work on another machine."
+)
+
+
+@dataclass(frozen=True)
+class PlaylistGenerationRequest:
+    source_directory: str
+    special_file: str
+    output_path: str
+    insert_every: int
+
+
+def run_generation_request(request: PlaylistGenerationRequest) -> PlaylistResult:
+    return create_vlc_playlist(
+        source_directory=request.source_directory,
+        special_file=request.special_file,
+        insert_every=request.insert_every,
+        output_path=request.output_path,
+    )
+
+
+class BackgroundGenerationRunner:
+    def __init__(
+        self,
+        *,
+        generator: Callable[[PlaylistGenerationRequest], PlaylistResult] = (
+            run_generation_request
+        ),
+        schedule: Callable[[Callable[[], None]], None],
+    ) -> None:
+        self._generator = generator
+        self._schedule = schedule
+        self._is_running = False
+
+    @property
+    def is_running(self) -> bool:
+        return self._is_running
+
+    def start(
+        self,
+        request: PlaylistGenerationRequest,
+        *,
+        on_start: Callable[[], None],
+        on_success: Callable[[PlaylistResult], None],
+        on_error: Callable[[Exception], None],
+    ) -> bool:
+        if self._is_running:
+            return False
+
+        self._is_running = True
+        on_start()
+        threading.Thread(
+            target=self._run_in_background,
+            args=(request, on_success, on_error),
+            daemon=True,
+        ).start()
+        return True
+
+    def _run_in_background(
+        self,
+        request: PlaylistGenerationRequest,
+        on_success: Callable[[PlaylistResult], None],
+        on_error: Callable[[Exception], None],
+    ) -> None:
+        try:
+            result = self._generator(request)
+        except Exception as error:
+            self._schedule(
+                lambda captured_error=error: self._finish_with_error(
+                    captured_error,
+                    on_error,
+                )
+            )
+            return
+
+        self._schedule(lambda: self._finish_with_success(result, on_success))
+
+    def _finish_with_success(
+        self,
+        result: PlaylistResult,
+        on_success: Callable[[PlaylistResult], None],
+    ) -> None:
+        self._is_running = False
+        on_success(result)
+
+    def _finish_with_error(
+        self,
+        error: Exception,
+        on_error: Callable[[Exception], None],
+    ) -> None:
+        self._is_running = False
+        on_error(error)
 
 
 class PlaylistGeneratorApp:
@@ -21,6 +120,9 @@ class PlaylistGeneratorApp:
         self.insert_every = tk.IntVar(value=5)
         self.status_text = tk.StringVar(
             value="Select a music folder, special file, interval, and output path."
+        )
+        self.generation_runner = BackgroundGenerationRunner(
+            schedule=lambda callback: self.root.after(0, callback)
         )
 
         self._build_layout()
@@ -82,7 +184,19 @@ class PlaylistGeneratorApp:
         frame.rowconfigure(4, weight=1)
         self.status_widget = status
 
-        ttk.Button(frame, text="Generate", command=self.generate_playlist).grid(
+        ttk.Label(
+            frame,
+            text=ABSOLUTE_PATH_WARNING,
+            wraplength=520,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        self.generate_button = ttk.Button(
+            frame,
+            text="Generate",
+            command=self.generate_playlist,
+        )
+        self.generate_button.grid(
             row=4, column=2, sticky="nsew", padx=(12, 0), pady=(8, 0)
         )
 
@@ -142,20 +256,31 @@ class PlaylistGeneratorApp:
         if selected:
             self.output_path.set(selected)
 
+    def set_generation_active(self, active: bool) -> None:
+        self.generate_button.configure(state="disabled" if active else "normal")
+
+    def build_generation_request(self) -> PlaylistGenerationRequest:
+        return PlaylistGenerationRequest(
+            source_directory=self.source_directory.get(),
+            special_file=self.special_file.get(),
+            insert_every=self.insert_every.get(),
+            output_path=self.output_path.get(),
+        )
+
     def generate_playlist(self) -> None:
-        try:
-            self.set_status("Generating playlist...")
-            result = create_vlc_playlist(
-                source_directory=self.source_directory.get(),
-                special_file=self.special_file.get(),
-                insert_every=self.insert_every.get(),
-                output_path=self.output_path.get(),
-            )
-        except Exception as error:
-            message = str(error)
-            self.set_status(message)
-            messagebox.showerror("Generation Failed", message, parent=self.root)
-            return
+        self.generation_runner.start(
+            self.build_generation_request(),
+            on_start=self._on_generation_started,
+            on_success=self._on_generation_succeeded,
+            on_error=self._on_generation_failed,
+        )
+
+    def _on_generation_started(self) -> None:
+        self.set_generation_active(True)
+        self.set_status("Generating playlist...")
+
+    def _on_generation_succeeded(self, result: PlaylistResult) -> None:
+        self.set_generation_active(False)
 
         message = "\n".join(
             [
@@ -163,14 +288,31 @@ class PlaylistGeneratorApp:
                 f"Shuffled source tracks: {result.source_track_count}",
                 f"Playlist entries: {result.playlist_entry_count}",
                 f"Inserted every: {result.insert_every} songs",
+                "",
+                ABSOLUTE_PATH_WARNING,
             ]
         )
         self.set_status(message)
         messagebox.showinfo(
             "Success",
-            f"Playlist created successfully.\n\n{result.output_path}",
+            (
+                "Playlist created successfully.\n\n"
+                f"{result.output_path}\n\n"
+                f"Warning: {ABSOLUTE_PATH_WARNING}"
+            ),
             parent=self.root,
         )
+
+    def _on_generation_failed(self, error: Exception) -> None:
+        self.set_generation_active(False)
+        if isinstance(error, PlaylistGeneratorError):
+            message = str(error)
+        else:
+            traceback.print_exception(error)
+            message = "An unexpected error occurred while generating the playlist."
+
+        self.set_status(message)
+        messagebox.showerror("Generation Failed", message, parent=self.root)
 
 
 def main() -> None:

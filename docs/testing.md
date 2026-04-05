@@ -12,6 +12,9 @@ Validation behavior is defined in two files:
 - [.pre-commit-config.yaml](../.pre-commit-config.yaml) for the commit-time
   hook pipeline.
 
+The pinned Windows CI dependency set lives in
+[requirements/windows-ci-lock.txt](../requirements/windows-ci-lock.txt).
+
 When commands or rules change, update those files first and then update this
 document to match.
 
@@ -21,36 +24,41 @@ Use Python 3.9 or newer. Install the project and development dependencies in
 the active environment:
 
 ```bash
-python3 -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 ```
 
 If you need to build Windows executables from the repository, also install the
 optional packaging dependency:
 
 ```bash
-python3 -m pip install -e ".[windows-build]"
+python -m pip install -e ".[windows-build]"
 ```
 
-The local hook configuration currently invokes tools through `.venv/bin/python`.
-If you use a different environment layout, either activate `.venv` or update
-[.pre-commit-config.yaml](../.pre-commit-config.yaml) so hook execution matches
-your local setup.
+The local hook configuration uses `pre-commit` managed Python environments, so
+it does not depend on a hardcoded `.venv/bin/python` path or on a particular
+shell-specific interpreter location.
 
 ## Validation Commands
 
 Run the checks in this order when you want the clearest failure signals:
 
 ```bash
-python3 -m ruff check .
-python3 -m ruff format --check .
-python3 -m pytest
-python3 -m pre_commit run --all-files
+python -m ruff check .
+python -m ruff format --check .
+python -m pytest
+python -m pre_commit run --all-files
 ```
 
 For the Windows packaging helper, use:
 
 ```bash
-python3 -m playlist_generator.windows_build --dry-run
+python -m playlist_generator.windows_build --dry-run
+```
+
+To verify the pinned Windows CI dependency set locally, use:
+
+```bash
+pip-audit --strict -r requirements/windows-ci-lock.txt
 ```
 
 ## What Each Command Covers
@@ -68,12 +76,12 @@ selection includes:
 If you want lint auto-fixes before rerunning verification, use:
 
 ```bash
-python3 -m ruff check . --fix
+python -m ruff check . --fix
 ```
 
 ### `ruff format --check .`
 
-Verifies formatting without rewriting files. Use `python3 -m ruff format .` to
+Verifies formatting without rewriting files. Use `python -m ruff format .` to
 apply formatting changes locally.
 
 ### `pytest`
@@ -83,6 +91,7 @@ from [pyproject.toml](../pyproject.toml). The suite currently covers:
 
 - Shared playlist generation behavior in `tests/test_playlist_generator.py`.
 - CLI behavior and failure handling in `tests/test_cli.py`.
+- GUI background generation state handling in `tests/test_gui.py`.
 - Windows packaging command construction in `tests/test_windows_build.py`.
 
 Coverage reporting is enabled by default through the pytest configuration.
@@ -104,17 +113,19 @@ actual executable produced by PyInstaller is platform-specific, so a Windows
 GitHub Actions workflow
 [`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
 provides the Windows-side validation that cannot be completed from Linux or
-macOS alone. It installs the optional build dependency, runs `pytest` on
-`windows-latest`, builds both executables, and uploads `dist/*.exe` as an
-artifact. For tag pushes matching `v*`, the same workflow also attaches the
-generated `.exe` files to the corresponding GitHub Release.
+macOS alone. The read-only build job installs the pinned dependency set from
+[requirements/windows-ci-lock.txt](../requirements/windows-ci-lock.txt), runs
+`pip-audit --strict`, executes `pytest` on `windows-latest`, builds both
+executables, and uploads `dist/*.exe` as an artifact. For tag pushes matching
+`v*`, a separate publish job rebuilds the executables from the same pinned
+inputs and attaches them to the corresponding GitHub Release.
 
 ## Git Hook Behavior
 
 Install the hook once per clone:
 
 ```bash
-python3 -m pre_commit install
+python -m pre_commit install
 ```
 
 After installation, each `git commit` runs the local hooks defined in
