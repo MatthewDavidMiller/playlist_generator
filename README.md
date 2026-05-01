@@ -115,10 +115,11 @@ Or, after installation:
 vlc-playlist-generator-gui
 ```
 
-The GUI includes separate actions for playlist generation, volume
-normalization, and guided FFmpeg installation. Normalization writes copied audio
-files to the selected normalized output folder and leaves the original files in
-place.
+The GUI opens in dark mode and includes a Light/Dark toggle. Playlist
+generation and volume normalization are shown as separate sections with
+separate source-folder inputs so you can generate a playlist from one folder and
+normalize audio from another. Normalization writes copied audio files to the
+selected normalized output folder and leaves the original files in place.
 
 ## Windows EXE
 

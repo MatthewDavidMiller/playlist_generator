@@ -27,6 +27,37 @@ ABSOLUTE_PATH_WARNING = (
     "your directory structure and the playlist may not work on another machine."
 )
 
+THEME_COLORS = {
+    "dark": {
+        "background": "#111827",
+        "surface": "#1f2937",
+        "surface_alt": "#273449",
+        "text": "#f9fafb",
+        "muted": "#cbd5e1",
+        "accent": "#38bdf8",
+        "accent_pressed": "#0ea5e9",
+        "border": "#334155",
+        "field": "#0f172a",
+        "field_text": "#f8fafc",
+        "disabled": "#94a3b8",
+        "select": "#075985",
+    },
+    "light": {
+        "background": "#f4f7fb",
+        "surface": "#ffffff",
+        "surface_alt": "#eef4fb",
+        "text": "#172033",
+        "muted": "#526173",
+        "accent": "#0f766e",
+        "accent_pressed": "#115e59",
+        "border": "#cfd9e5",
+        "field": "#ffffff",
+        "field_text": "#111827",
+        "disabled": "#7b8794",
+        "select": "#99f6e4",
+    },
+}
+
 TRequest = TypeVar("TRequest")
 TResult = TypeVar("TResult")
 
@@ -149,16 +180,24 @@ class PlaylistGeneratorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("VLC Playlist Generator")
-        self.root.minsize(820, 500)
+        self.root.minsize(900, 680)
 
-        self.source_directory = tk.StringVar()
+        self.playlist_source_directory = tk.StringVar()
+        self.normalization_source_directory = tk.StringVar()
+        self.source_directory = self.playlist_source_directory
         self.special_file = tk.StringVar()
         self.output_path = tk.StringVar()
         self.normalized_output_directory = tk.StringVar()
         self.insert_every = tk.IntVar(value=5)
+        self.theme_name = tk.StringVar(value="dark")
         self.status_text = tk.StringVar(
-            value="Select a music folder, special file, interval, and output path."
+            value=(
+                "Start with the playlist section, or use volume normalization "
+                "as a separate copy step."
+            )
         )
+        self.status_widget: tk.Text | None = None
+        self.theme_button: ttk.Button | None = None
         self.generation_runner = BackgroundGenerationRunner[
             PlaylistGenerationRequest, PlaylistResult
         ](
@@ -178,146 +217,476 @@ class PlaylistGeneratorApp:
             schedule=lambda callback: self.root.after(0, callback),
         )
 
+        self._configure_theme()
         self._build_layout()
+        self.apply_theme()
 
     def _build_layout(self) -> None:
-        frame = ttk.Frame(self.root, padding=16)
-        frame.grid(sticky="nsew")
+        frame = ttk.Frame(self.root, padding=20, style="App.TFrame")
+        frame.grid(row=0, column=0, sticky="nsew")
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(3, weight=1)
 
-        for column in range(3):
-            frame.columnconfigure(column, weight=1 if column == 1 else 0)
+        header = ttk.Frame(frame, style="App.TFrame")
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
+        header.columnconfigure(0, weight=1)
 
-        ttk.Label(frame, text="Music folder").grid(
-            row=0, column=0, sticky="w", pady=(0, 12)
+        ttk.Label(
+            header,
+            text="VLC Playlist Generator",
+            style="Title.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            header,
+            text=(
+                "Build shuffled playlists and copy normalized audio without "
+                "changing originals."
+            ),
+            style="HeaderHelp.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self.theme_button = ttk.Button(
+            header,
+            text="Light Mode",
+            command=self.toggle_theme,
+            style="Secondary.TButton",
         )
-        ttk.Entry(frame, textvariable=self.source_directory).grid(
-            row=0, column=1, sticky="ew", padx=(12, 12), pady=(0, 12)
-        )
-        ttk.Button(frame, text="Browse...", command=self.choose_source_directory).grid(
-            row=0, column=2, sticky="ew", pady=(0, 12)
-        )
+        self.theme_button.grid(row=0, column=1, rowspan=2, sticky="e", padx=(16, 0))
 
-        ttk.Label(frame, text="Special file").grid(
-            row=1, column=0, sticky="w", pady=(0, 12)
-        )
-        ttk.Entry(frame, textvariable=self.special_file).grid(
-            row=1, column=1, sticky="ew", padx=(12, 12), pady=(0, 12)
-        )
-        ttk.Button(frame, text="Browse...", command=self.choose_special_file).grid(
-            row=1, column=2, sticky="ew", pady=(0, 12)
-        )
-
-        ttk.Label(frame, text="Insert every").grid(
-            row=2, column=0, sticky="w", pady=(0, 12)
-        )
-        ttk.Spinbox(
+        playlist_section = self._create_section(
             frame,
+            row=1,
+            title="Playlist Generator",
+            description=(
+                "Choose the tracks to shuffle, the audio file to insert, and "
+                "where the playlist should be saved."
+            ),
+        )
+
+        self._add_path_row(
+            playlist_section,
+            row=1,
+            label="Playlist music folder",
+            variable=self.playlist_source_directory,
+            help_text=(
+                "Scanned recursively for songs that will be shuffled into the playlist."
+            ),
+            button_text="Browse...",
+            command=self.choose_playlist_source_directory,
+        )
+        self._add_path_row(
+            playlist_section,
+            row=2,
+            label="Special audio file",
+            variable=self.special_file,
+            help_text="Inserted after each full block of regular songs.",
+            button_text="Browse...",
+            command=self.choose_special_file,
+        )
+        self._add_interval_row(playlist_section, row=3)
+        self._add_path_row(
+            playlist_section,
+            row=4,
+            label="Output playlist",
+            variable=self.output_path,
+            help_text="Saved as an .m3u8 file with absolute paths for VLC.",
+            button_text="Save as...",
+            command=self.choose_output_path,
+        )
+
+        playlist_actions = ttk.Frame(playlist_section, style="Card.TFrame")
+        playlist_actions.grid(
+            row=5,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            pady=(12, 0),
+        )
+        playlist_actions.columnconfigure(0, weight=1)
+        ttk.Label(
+            playlist_actions,
+            text=ABSOLUTE_PATH_WARNING,
+            wraplength=620,
+            justify="left",
+            style="Help.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        self.generate_button = ttk.Button(
+            playlist_actions,
+            text="Generate Playlist",
+            command=self.generate_playlist,
+            style="Accent.TButton",
+        )
+        self.generate_button.grid(row=0, column=1, sticky="e", padx=(16, 0))
+
+        normalization_section = self._create_section(
+            frame,
+            row=2,
+            title="Volume Normalization",
+            description=(
+                "Copy supported audio files to a separate folder after FFmpeg "
+                "normalizes their loudness."
+            ),
+        )
+
+        self._add_path_row(
+            normalization_section,
+            row=1,
+            label="Normalization source folder",
+            variable=self.normalization_source_directory,
+            help_text=(
+                "Scanned recursively for files to normalize; this can differ "
+                "from the playlist folder."
+            ),
+            button_text="Browse...",
+            command=self.choose_normalization_source_directory,
+        )
+        self._add_path_row(
+            normalization_section,
+            row=2,
+            label="Normalized output folder",
+            variable=self.normalized_output_directory,
+            help_text="Receives copied normalized files while preserving subfolders.",
+            button_text="Choose...",
+            command=self.choose_normalized_output_directory,
+        )
+
+        normalization_actions = ttk.Frame(normalization_section, style="Card.TFrame")
+        normalization_actions.grid(
+            row=3,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            pady=(12, 0),
+        )
+        normalization_actions.columnconfigure(0, weight=1)
+        ttk.Label(
+            normalization_actions,
+            text=(
+                "FFmpeg is required for normalization; playlist generation "
+                "does not need it."
+            ),
+            wraplength=620,
+            justify="left",
+            style="Help.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+        self.install_ffmpeg_button = ttk.Button(
+            normalization_actions,
+            text="Install FFmpeg",
+            command=self.install_ffmpeg,
+            style="Secondary.TButton",
+        )
+        self.install_ffmpeg_button.grid(row=0, column=1, sticky="e", padx=(16, 8))
+        self.normalize_button = ttk.Button(
+            normalization_actions,
+            text="Normalize Volume",
+            command=self.normalize_volume,
+            style="Accent.TButton",
+        )
+        self.normalize_button.grid(row=0, column=2, sticky="e")
+
+        status_frame = self._create_section(
+            frame,
+            row=3,
+            title="Status",
+            description="Progress, results, and validation messages appear here.",
+        )
+        status_frame.rowconfigure(1, weight=1)
+        status = tk.Text(
+            status_frame,
+            height=7,
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=10,
+        )
+        status.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=(10, 0))
+        status.insert("1.0", self.status_text.get())
+        status.configure(state="disabled")
+        self.status_widget = status
+
+    def _create_section(
+        self,
+        parent: ttk.Widget,
+        *,
+        row: int,
+        title: str,
+        description: str,
+    ) -> ttk.Frame:
+        section = ttk.Frame(parent, padding=16, style="Card.TFrame")
+        section.grid(row=row, column=0, sticky="nsew", pady=(0, 16))
+        section.columnconfigure(1, weight=1)
+
+        ttk.Label(section, text=title, style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        ttk.Label(
+            section,
+            text=description,
+            wraplength=720,
+            justify="left",
+            style="Help.TLabel",
+        ).grid(row=0, column=1, columnspan=2, sticky="ew", padx=(18, 0))
+        return section
+
+    def _add_path_row(
+        self,
+        parent: ttk.Widget,
+        *,
+        row: int,
+        label: str,
+        variable: tk.StringVar,
+        help_text: str,
+        button_text: str,
+        command: Callable[[], None],
+    ) -> None:
+        ttk.Label(parent, text=label, style="Field.TLabel").grid(
+            row=row,
+            column=0,
+            sticky="nw",
+            pady=(14, 0),
+        )
+        field_frame = ttk.Frame(parent, style="Card.TFrame")
+        field_frame.grid(row=row, column=1, sticky="ew", padx=(18, 12), pady=(14, 0))
+        field_frame.columnconfigure(0, weight=1)
+        ttk.Entry(field_frame, textvariable=variable).grid(
+            row=0,
+            column=0,
+            sticky="ew",
+        )
+        ttk.Label(
+            field_frame,
+            text=help_text,
+            wraplength=520,
+            justify="left",
+            style="Help.TLabel",
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        ttk.Button(parent, text=button_text, command=command).grid(
+            row=row,
+            column=2,
+            sticky="ew",
+            pady=(14, 0),
+        )
+
+    def _add_interval_row(self, parent: ttk.Widget, *, row: int) -> None:
+        ttk.Label(parent, text="Insert every", style="Field.TLabel").grid(
+            row=row,
+            column=0,
+            sticky="nw",
+            pady=(14, 0),
+        )
+        field_frame = ttk.Frame(parent, style="Card.TFrame")
+        field_frame.grid(row=row, column=1, sticky="w", padx=(18, 12), pady=(14, 0))
+        ttk.Spinbox(
+            field_frame,
             from_=1,
             to=100000,
             textvariable=self.insert_every,
             width=12,
-        ).grid(row=2, column=1, sticky="w", padx=(12, 12), pady=(0, 12))
-
-        ttk.Label(frame, text="Output playlist").grid(
-            row=3, column=0, sticky="w", pady=(0, 12)
-        )
-        ttk.Entry(frame, textvariable=self.output_path).grid(
-            row=3, column=1, sticky="ew", padx=(12, 12), pady=(0, 12)
-        )
-        ttk.Button(frame, text="Save as...", command=self.choose_output_path).grid(
-            row=3, column=2, sticky="ew", pady=(0, 12)
-        )
-
-        ttk.Separator(frame).grid(
-            row=4,
-            column=0,
-            columnspan=3,
-            sticky="ew",
-            pady=(4, 12),
-        )
-
-        ttk.Label(frame, text="Normalized output").grid(
-            row=5, column=0, sticky="w", pady=(0, 12)
-        )
-        ttk.Entry(frame, textvariable=self.normalized_output_directory).grid(
-            row=5, column=1, sticky="ew", padx=(12, 12), pady=(0, 12)
-        )
-        ttk.Button(
-            frame,
-            text="Choose...",
-            command=self.choose_normalized_output_directory,
-        ).grid(row=5, column=2, sticky="ew", pady=(0, 12))
-
-        self.normalize_button = ttk.Button(
-            frame,
-            text="Normalize Volume",
-            command=self.normalize_volume,
-        )
-        self.normalize_button.grid(row=6, column=1, sticky="w", pady=(0, 12))
-
-        self.install_ffmpeg_button = ttk.Button(
-            frame,
-            text="Install FFmpeg",
-            command=self.install_ffmpeg,
-        )
-        self.install_ffmpeg_button.grid(row=6, column=2, sticky="ew", pady=(0, 12))
-
-        status = tk.Text(frame, height=6, wrap="word")
-        status.grid(row=7, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
-        status.insert("1.0", self.status_text.get())
-        status.configure(state="disabled")
-        frame.rowconfigure(7, weight=1)
-        self.status_widget = status
-
+        ).grid(row=0, column=0, sticky="w")
         ttk.Label(
-            frame,
-            text=ABSOLUTE_PATH_WARNING,
+            field_frame,
+            text=(
+                "Number of regular songs played before the special audio "
+                "file is inserted."
+            ),
             wraplength=520,
             justify="left",
-        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
+            style="Help.TLabel",
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        self.generate_button = ttk.Button(
-            frame,
-            text="Generate",
-            command=self.generate_playlist,
+    def _configure_theme(self) -> None:
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+        self.style = style
+
+    def apply_theme(self) -> None:
+        colors = THEME_COLORS[self.theme_name.get()]
+        self.root.configure(background=colors["background"])
+
+        self.style.configure("App.TFrame", background=colors["background"])
+        self.style.configure(
+            "Card.TFrame",
+            background=colors["surface"],
+            bordercolor=colors["border"],
+            lightcolor=colors["surface"],
+            darkcolor=colors["surface"],
+            relief="flat",
         )
-        self.generate_button.grid(
-            row=7, column=2, sticky="nsew", padx=(12, 0), pady=(8, 0)
+        self.style.configure(
+            "TLabel",
+            background=colors["surface"],
+            foreground=colors["text"],
         )
+        self.style.configure(
+            "Title.TLabel",
+            background=colors["background"],
+            foreground=colors["text"],
+            font=("TkDefaultFont", 18, "bold"),
+        )
+        self.style.configure(
+            "SectionTitle.TLabel",
+            background=colors["surface"],
+            foreground=colors["text"],
+            font=("TkDefaultFont", 12, "bold"),
+        )
+        self.style.configure(
+            "Field.TLabel",
+            background=colors["surface"],
+            foreground=colors["text"],
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        self.style.configure(
+            "Help.TLabel",
+            background=colors["surface"],
+            foreground=colors["muted"],
+        )
+        self.style.configure(
+            "HeaderHelp.TLabel",
+            background=colors["background"],
+            foreground=colors["muted"],
+        )
+        self.style.configure(
+            "TEntry",
+            fieldbackground=colors["field"],
+            foreground=colors["field_text"],
+            insertcolor=colors["field_text"],
+            bordercolor=colors["border"],
+            lightcolor=colors["border"],
+            darkcolor=colors["border"],
+            padding=6,
+        )
+        self.style.configure(
+            "TSpinbox",
+            fieldbackground=colors["field"],
+            foreground=colors["field_text"],
+            insertcolor=colors["field_text"],
+            bordercolor=colors["border"],
+            arrowcolor=colors["text"],
+            padding=4,
+        )
+        self.style.configure(
+            "TButton",
+            background=colors["surface_alt"],
+            foreground=colors["text"],
+            bordercolor=colors["border"],
+            focusthickness=1,
+            focuscolor=colors["accent"],
+            padding=(12, 7),
+        )
+        self.style.map(
+            "TButton",
+            background=[
+                ("pressed", colors["border"]),
+                ("active", colors["surface_alt"]),
+                ("disabled", colors["surface"]),
+            ],
+            foreground=[("disabled", colors["disabled"])],
+        )
+        self.style.configure(
+            "Secondary.TButton",
+            background=colors["surface_alt"],
+            foreground=colors["text"],
+        )
+        self.style.configure(
+            "Accent.TButton",
+            background=colors["accent"],
+            foreground="#ffffff",
+            bordercolor=colors["accent"],
+        )
+        self.style.map(
+            "Accent.TButton",
+            background=[
+                ("pressed", colors["accent_pressed"]),
+                ("active", colors["accent_pressed"]),
+                ("disabled", colors["surface_alt"]),
+            ],
+            foreground=[("disabled", colors["disabled"])],
+        )
+
+        if self.status_widget is not None:
+            self.status_widget.configure(
+                background=colors["field"],
+                foreground=colors["field_text"],
+                insertbackground=colors["field_text"],
+                selectbackground=colors["select"],
+                selectforeground=colors["field_text"],
+                highlightbackground=colors["border"],
+                highlightcolor=colors["accent"],
+            )
+        if self.theme_button is not None:
+            next_theme = (
+                "Light Mode" if self.theme_name.get() == "dark" else "Dark Mode"
+            )
+            self.theme_button.configure(text=next_theme)
+
+    def toggle_theme(self) -> None:
+        next_theme = "light" if self.theme_name.get() == "dark" else "dark"
+        self.theme_name.set(next_theme)
+        self.apply_theme()
 
     def set_status(self, text: str) -> None:
+        self.status_text.set(text)
+        if self.status_widget is None:
+            return
         self.status_widget.configure(state="normal")
         self.status_widget.delete("1.0", "end")
         self.status_widget.insert("1.0", text)
         self.status_widget.configure(state="disabled")
 
     def default_playlist_path(self) -> str:
-        source_directory = self.source_directory.get().strip()
+        source_directory = self.playlist_source_directory.get().strip()
         if not source_directory:
             return ""
         leaf_name = Path(source_directory).name or "playlist"
         return str(Path(source_directory) / f"{leaf_name}-playlist.m3u8")
 
-    def choose_source_directory(self) -> None:
+    def default_normalized_output_directory(self) -> str:
+        source_directory = self.normalization_source_directory.get().strip()
+        if not source_directory:
+            return ""
+        source_path = Path(source_directory)
+        return str(source_path.with_name(f"{source_path.name}-normalized"))
+
+    def choose_playlist_source_directory(self) -> None:
         selected = filedialog.askdirectory(
             parent=self.root,
             title="Choose the folder that contains the music for the playlist.",
             mustexist=True,
         )
         if selected:
-            self.source_directory.set(selected)
+            self.playlist_source_directory.set(selected)
             if not self.output_path.get().strip():
                 self.output_path.set(self.default_playlist_path())
+            if not self.normalization_source_directory.get().strip():
+                self.normalization_source_directory.set(selected)
             if not self.normalized_output_directory.get().strip():
-                source_path = Path(selected)
                 self.normalized_output_directory.set(
-                    str(source_path.with_name(f"{source_path.name}-normalized"))
+                    self.default_normalized_output_directory()
+                )
+
+    def choose_source_directory(self) -> None:
+        self.choose_playlist_source_directory()
+
+    def choose_normalization_source_directory(self) -> None:
+        selected = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose the folder that contains files to normalize.",
+            mustexist=True,
+        )
+        if selected:
+            self.normalization_source_directory.set(selected)
+            if not self.normalized_output_directory.get().strip():
+                self.normalized_output_directory.set(
+                    self.default_normalized_output_directory()
                 )
 
     def choose_special_file(self) -> None:
-        initial_dir = self.source_directory.get().strip() or None
+        initial_dir = self.playlist_source_directory.get().strip() or None
         selected = filedialog.askopenfilename(
             parent=self.root,
             title="Choose the special audio file",
@@ -349,7 +718,7 @@ class PlaylistGeneratorApp:
             self.output_path.set(selected)
 
     def choose_normalized_output_directory(self) -> None:
-        initial_dir = self.source_directory.get().strip() or None
+        initial_dir = self.normalization_source_directory.get().strip() or None
         selected = filedialog.askdirectory(
             parent=self.root,
             title="Choose where normalized audio files will be written.",
@@ -369,7 +738,7 @@ class PlaylistGeneratorApp:
 
     def build_generation_request(self) -> PlaylistGenerationRequest:
         return PlaylistGenerationRequest(
-            source_directory=self.source_directory.get(),
+            source_directory=self.playlist_source_directory.get(),
             special_file=self.special_file.get(),
             insert_every=self.insert_every.get(),
             output_path=self.output_path.get(),
@@ -377,7 +746,7 @@ class PlaylistGeneratorApp:
 
     def build_normalization_request(self) -> VolumeNormalizationRequest:
         return VolumeNormalizationRequest(
-            source_directory=self.source_directory.get(),
+            source_directory=self.normalization_source_directory.get(),
             output_directory=self.normalized_output_directory.get(),
         )
 

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import threading
+import tkinter as tk
 from pathlib import Path
 
+from playlist_generator import gui
 from playlist_generator.core import PlaylistResult, PlaylistValidationError
 from playlist_generator.gui import (
     BackgroundGenerationRunner,
     PlaylistGenerationRequest,
+    PlaylistGeneratorApp,
     VolumeNormalizationRequest,
 )
 
@@ -36,6 +39,22 @@ def build_normalization_request(tmp_path: Path) -> VolumeNormalizationRequest:
         source_directory=str(tmp_path / "music"),
         output_directory=str(tmp_path / "normalized"),
     )
+
+
+def build_unrendered_app() -> PlaylistGeneratorApp:
+    master = tk.Tcl()
+    app = object.__new__(PlaylistGeneratorApp)
+    app.root = None
+    app.playlist_source_directory = tk.StringVar(master=master)
+    app.normalization_source_directory = tk.StringVar(master=master)
+    app.source_directory = app.playlist_source_directory
+    app.special_file = tk.StringVar(master=master)
+    app.output_path = tk.StringVar(master=master)
+    app.normalized_output_directory = tk.StringVar(master=master)
+    app.insert_every = tk.IntVar(master=master, value=5)
+    app.status_text = tk.StringVar(master=master)
+    app.status_widget = None
+    return app
 
 
 def test_background_generation_runner_blocks_duplicate_start_while_running(
@@ -142,3 +161,86 @@ def test_background_normalization_runner_blocks_duplicate_start_while_running(
     assert success_event.wait(timeout=1)
     assert success_results == ["done"]
     assert not runner.is_running
+
+
+def test_gui_builds_playlist_request_from_playlist_source(tmp_path: Path) -> None:
+    app = build_unrendered_app()
+    app.playlist_source_directory.set(str(tmp_path / "playlist-music"))
+    app.normalization_source_directory.set(str(tmp_path / "normalization-music"))
+    app.special_file.set(str(tmp_path / "station-id.mp3"))
+    app.output_path.set(str(tmp_path / "playlist.m3u8"))
+    app.insert_every.set(3)
+
+    assert app.build_generation_request() == PlaylistGenerationRequest(
+        source_directory=str(tmp_path / "playlist-music"),
+        special_file=str(tmp_path / "station-id.mp3"),
+        output_path=str(tmp_path / "playlist.m3u8"),
+        insert_every=3,
+    )
+
+
+def test_gui_builds_normalization_request_from_normalization_source(
+    tmp_path: Path,
+) -> None:
+    app = build_unrendered_app()
+    app.playlist_source_directory.set(str(tmp_path / "playlist-music"))
+    app.normalization_source_directory.set(str(tmp_path / "normalization-music"))
+    app.normalized_output_directory.set(str(tmp_path / "normalized"))
+
+    assert app.build_normalization_request() == VolumeNormalizationRequest(
+        source_directory=str(tmp_path / "normalization-music"),
+        output_directory=str(tmp_path / "normalized"),
+    )
+
+
+def test_gui_playlist_source_suggests_independent_normalization_defaults(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = build_unrendered_app()
+    selected = tmp_path / "music"
+    monkeypatch.setattr(gui.filedialog, "askdirectory", lambda **kwargs: str(selected))
+
+    app.choose_playlist_source_directory()
+
+    assert app.playlist_source_directory.get() == str(selected)
+    assert app.normalization_source_directory.get() == str(selected)
+    assert app.output_path.get() == str(selected / "music-playlist.m3u8")
+    assert app.normalized_output_directory.get() == str(tmp_path / "music-normalized")
+
+
+def test_gui_playlist_source_does_not_replace_existing_normalization_source(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = build_unrendered_app()
+    existing_normalization_source = tmp_path / "normalize-this"
+    existing_normalized_output = tmp_path / "already-normalized"
+    app.normalization_source_directory.set(str(existing_normalization_source))
+    app.normalized_output_directory.set(str(existing_normalized_output))
+    selected = tmp_path / "playlist-music"
+    monkeypatch.setattr(gui.filedialog, "askdirectory", lambda **kwargs: str(selected))
+
+    app.choose_playlist_source_directory()
+
+    assert app.playlist_source_directory.get() == str(selected)
+    assert app.normalization_source_directory.get() == str(
+        existing_normalization_source
+    )
+    assert app.normalized_output_directory.get() == str(existing_normalized_output)
+
+
+def test_gui_normalization_source_suggests_normalized_output(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = build_unrendered_app()
+    selected = tmp_path / "raw-audio"
+    monkeypatch.setattr(gui.filedialog, "askdirectory", lambda **kwargs: str(selected))
+
+    app.choose_normalization_source_directory()
+
+    assert app.normalization_source_directory.get() == str(selected)
+    assert app.normalized_output_directory.get() == str(
+        tmp_path / "raw-audio-normalized"
+    )
