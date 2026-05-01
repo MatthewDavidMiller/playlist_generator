@@ -50,7 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
 def build_normalize_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="playlist_generator normalize-volume",
-        description="Normalize the volume of supported audio files in a directory.",
+        description=(
+            "Normalize supported audio files in a directory as Opus 160k .opus files."
+        ),
     )
     parser.add_argument(
         "--source-directory",

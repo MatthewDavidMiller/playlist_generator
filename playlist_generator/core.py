@@ -16,6 +16,7 @@ SUPPORTED_EXTENSIONS = (
     ".m4a",
     ".aac",
     ".ogg",
+    ".opus",
     ".wma",
 )
 

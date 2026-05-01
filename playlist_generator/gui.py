@@ -325,7 +325,7 @@ class PlaylistGeneratorApp:
             title="Volume Normalization",
             description=(
                 "Copy supported audio files to a separate folder after FFmpeg "
-                "normalizes their loudness."
+                "normalizes their loudness as Opus 160k files."
             ),
         )
 
@@ -346,7 +346,9 @@ class PlaylistGeneratorApp:
             row=2,
             label="Normalized output folder",
             variable=self.normalized_output_directory,
-            help_text="Receives copied normalized files while preserving subfolders.",
+            help_text=(
+                "Receives copied .opus files while preserving source subfolders."
+            ),
             button_text="Choose...",
             command=self.choose_normalized_output_directory,
         )
@@ -692,7 +694,7 @@ class PlaylistGeneratorApp:
             title="Choose the special audio file",
             initialdir=initial_dir,
             filetypes=[
-                ("Audio Files", "*.mp3 *.flac *.wav *.m4a *.aac *.ogg *.wma"),
+                ("Audio Files", "*.mp3 *.flac *.wav *.m4a *.aac *.ogg *.opus *.wma"),
                 ("All Files", "*.*"),
             ],
         )

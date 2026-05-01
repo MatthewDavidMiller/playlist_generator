@@ -98,8 +98,9 @@ python3 -m playlist_generator normalize-volume \
 ```
 
 The normalization command preserves relative subfolders under the output
-directory and skips files that would overwrite their source path or already live
-under the output directory.
+directory, encodes normalized copies as Opus 160k `.opus` files with two-pass
+FFmpeg loudness normalization, and skips files that would overwrite their source
+path or already live under the output directory.
 
 ## GUI Usage
 
@@ -118,8 +119,8 @@ vlc-playlist-generator-gui
 The GUI opens in dark mode and includes a Light/Dark toggle. Playlist
 generation and volume normalization are shown as separate sections with
 separate source-folder inputs so you can generate a playlist from one folder and
-normalize audio from another. Normalization writes copied audio files to the
-selected normalized output folder and leaves the original files in place.
+normalize audio from another. Normalization writes Opus 160k `.opus` copies to
+the selected normalized output folder and leaves the original files in place.
 
 ## Windows EXE
 
@@ -129,7 +130,11 @@ standalone Windows GUI executable. Maintainer-facing build steps live in
 the build helper live in [docs/testing.md](docs/testing.md). Tagged builds also
 publish the generated `.exe` files to GitHub Releases.
 
-## Supported Audio Formats
+## Supported Input Audio Formats
+
+The playlist scanner and normalization source scanner accept these input
+extensions. Normalized output files are always written as Opus 160k `.opus`
+files.
 
 - `.mp3`
 - `.flac`
@@ -137,6 +142,7 @@ publish the generated `.exe` files to GitHub Releases.
 - `.m4a`
 - `.aac`
 - `.ogg`
+- `.opus`
 - `.wma`
 
 ## Playlist Behavior
