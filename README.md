@@ -2,8 +2,9 @@
 
 VLC Playlist Generator is a Python application for building shuffled `.m3u8`
 playlists and inserting a specific audio file after every configured block of
-tracks. The repository is now Python-only and is intended to run the same way on
-Windows, macOS, and Linux.
+tracks. It can also normalize the volume of supported audio files in a
+directory. The repository is now Python-only and is intended to run the same way
+on Windows, macOS, and Linux.
 
 ## Features
 
@@ -11,6 +12,8 @@ Windows, macOS, and Linux.
 - Deterministic, testable playlist generation logic in a shared core module.
 - Command-line interface for scripting and automation.
 - Tkinter desktop GUI for local interactive use.
+- Non-destructive volume normalization into a separate output directory.
+- Guided FFmpeg installation command for volume normalization.
 - Windows executable build support through PyInstaller.
 - UTF-8 `.m3u8` output with absolute paths for VLC compatibility.
 - Linting, formatting, tests, and git commit hooks for the Python codebase.
@@ -19,10 +22,18 @@ Windows, macOS, and Linux.
 
 - Python 3.9 or newer.
 - Tkinter for the GUI.
+- FFmpeg on `PATH` for volume normalization.
 
 Tkinter ships with the standard Python installers on Windows and macOS. On some
 Linux distributions you may need to install it separately, for example
 `python3-tk`.
+
+Playlist generation does not require FFmpeg. To check for FFmpeg and run a
+guided install command when a supported package manager is available:
+
+```bash
+python3 -m playlist_generator install-ffmpeg
+```
 
 ## Installation
 
@@ -78,6 +89,18 @@ Generated playlists store absolute local filesystem paths for VLC
 compatibility. Sharing a playlist can expose your directory structure and may
 not work on another machine.
 
+To normalize supported audio files recursively into a separate directory:
+
+```bash
+python3 -m playlist_generator normalize-volume \
+  --source-directory "/path/to/Music" \
+  --output-directory "/path/to/Normalized"
+```
+
+The normalization command preserves relative subfolders under the output
+directory and skips files that would overwrite their source path or already live
+under the output directory.
+
 ## GUI Usage
 
 Run the Tkinter application:
@@ -91,6 +114,11 @@ Or, after installation:
 ```bash
 vlc-playlist-generator-gui
 ```
+
+The GUI includes separate actions for playlist generation, volume
+normalization, and guided FFmpeg installation. Normalization writes copied audio
+files to the selected normalized output folder and leaves the original files in
+place.
 
 ## Windows EXE
 
@@ -133,6 +161,8 @@ No extra special file is added after a trailing partial block.
 ## Project Layout
 
 - `playlist_generator/core.py`: shared playlist generation logic.
+- `playlist_generator/audio_normalization.py`: FFmpeg-backed normalization logic.
+- `playlist_generator/ffmpeg_setup.py`: guided FFmpeg install command detection.
 - `playlist_generator/cli.py`: command-line entrypoint.
 - `playlist_generator/gui.py`: Tkinter GUI entrypoint.
 - `playlist_generator/windows_build.py`: Windows executable build helper.

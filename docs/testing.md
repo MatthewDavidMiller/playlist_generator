@@ -90,8 +90,12 @@ Runs the automated test suite under `tests/` using the repository configuration
 from [pyproject.toml](../pyproject.toml). The suite currently covers:
 
 - Shared playlist generation behavior in `tests/test_playlist_generator.py`.
+- FFmpeg-backed volume normalization behavior in
+  `tests/test_audio_normalization.py`.
+- Guided FFmpeg install command detection in `tests/test_ffmpeg_setup.py`.
 - CLI behavior and failure handling in `tests/test_cli.py`.
-- GUI background generation state handling in `tests/test_gui.py`.
+- GUI background generation and normalization state handling in
+  `tests/test_gui.py`.
 - Windows packaging command construction in `tests/test_windows_build.py`.
 
 Coverage reporting is enabled by default through the pytest configuration.
