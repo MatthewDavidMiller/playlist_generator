@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from pathlib import Path
+from types import SimpleNamespace
 
 from playlist_generator import gui
 from playlist_generator.core import PlaylistResult, PlaylistValidationError
@@ -120,6 +121,41 @@ def test_background_generation_runner_reports_expected_errors_and_resets_state(
     assert error_event.wait(timeout=1)
     assert observed_errors == [failure]
     assert not runner.is_running
+
+
+def test_gui_window_size_clamps_to_available_screen() -> None:
+    assert PlaylistGeneratorApp._calculate_window_size(
+        screen_width=1920,
+        screen_height=1080,
+    ) == (900, 680)
+    assert PlaylistGeneratorApp._calculate_window_size(
+        screen_width=800,
+        screen_height=600,
+    ) == (720, 520)
+    assert PlaylistGeneratorApp._calculate_window_size(
+        screen_width=420,
+        screen_height=320,
+    ) == (340, 260)
+
+
+def test_gui_min_window_size_does_not_exceed_small_screen() -> None:
+    assert PlaylistGeneratorApp._calculate_min_window_size(
+        screen_width=1920,
+        screen_height=1080,
+    ) == (560, 420)
+    assert PlaylistGeneratorApp._calculate_min_window_size(
+        screen_width=420,
+        screen_height=320,
+    ) == (340, 260)
+
+
+def test_gui_scroll_units_support_common_platform_events() -> None:
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(delta=120)) == -1
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(delta=-240)) == 2
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(delta=1)) == -1
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(num=4, delta=0)) == -3
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(num=5, delta=0)) == 3
+    assert PlaylistGeneratorApp._scroll_units(SimpleNamespace(delta=0)) == 0
 
 
 def test_background_normalization_runner_blocks_duplicate_start_while_running(

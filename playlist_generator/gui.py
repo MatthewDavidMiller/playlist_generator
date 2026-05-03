@@ -26,6 +26,10 @@ ABSOLUTE_PATH_WARNING = (
     "Generated playlists store absolute local file paths. Sharing them may expose "
     "your directory structure and the playlist may not work on another machine."
 )
+DEFAULT_WINDOW_SIZE = (900, 680)
+MIN_WINDOW_SIZE = (560, 420)
+SCREEN_MARGIN = 80
+MIN_WRAP_LENGTH = 180
 
 THEME_COLORS = {
     "dark": {
@@ -180,7 +184,7 @@ class PlaylistGeneratorApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("VLC Playlist Generator")
-        self.root.minsize(900, 680)
+        self._configure_window_size()
 
         self.playlist_source_directory = tk.StringVar()
         self.normalization_source_directory = tk.StringVar()
@@ -197,7 +201,12 @@ class PlaylistGeneratorApp:
             )
         )
         self.status_widget: tk.Text | None = None
+        self.status_scrollbar: ttk.Scrollbar | None = None
         self.theme_button: ttk.Button | None = None
+        self.scroll_canvas: tk.Canvas | None = None
+        self.scrollable_content: ttk.Frame | None = None
+        self.scroll_window: int | None = None
+        self.wrapped_labels: list[tuple[ttk.Label, int]] = []
         self.generation_runner = BackgroundGenerationRunner[
             PlaylistGenerationRequest, PlaylistResult
         ](
@@ -221,11 +230,59 @@ class PlaylistGeneratorApp:
         self._build_layout()
         self.apply_theme()
 
+    def _configure_window_size(self) -> None:
+        width, height = self._calculate_window_size(
+            screen_width=self.root.winfo_screenwidth(),
+            screen_height=self.root.winfo_screenheight(),
+        )
+        min_width, min_height = self._calculate_min_window_size(
+            screen_width=self.root.winfo_screenwidth(),
+            screen_height=self.root.winfo_screenheight(),
+        )
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(min_width, min_height)
+
+    @staticmethod
+    def _calculate_window_size(
+        *, screen_width: int, screen_height: int
+    ) -> tuple[int, int]:
+        available_width = max(320, screen_width - SCREEN_MARGIN)
+        available_height = max(260, screen_height - SCREEN_MARGIN)
+        return (
+            min(DEFAULT_WINDOW_SIZE[0], available_width),
+            min(DEFAULT_WINDOW_SIZE[1], available_height),
+        )
+
+    @staticmethod
+    def _calculate_min_window_size(
+        *, screen_width: int, screen_height: int
+    ) -> tuple[int, int]:
+        return (
+            min(MIN_WINDOW_SIZE[0], max(320, screen_width - SCREEN_MARGIN)),
+            min(MIN_WINDOW_SIZE[1], max(260, screen_height - SCREEN_MARGIN)),
+        )
+
     def _build_layout(self) -> None:
-        frame = ttk.Frame(self.root, padding=20, style="App.TFrame")
-        frame.grid(row=0, column=0, sticky="nsew")
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+
+        canvas = tk.Canvas(self.root, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        frame = ttk.Frame(canvas, padding=20, style="App.TFrame")
+        scroll_window = canvas.create_window((0, 0), window=frame, anchor="nw")
+        self.scroll_canvas = canvas
+        self.scrollable_content = frame
+        self.scroll_window = scroll_window
+
+        frame.bind("<Configure>", self._on_scroll_content_configured)
+        canvas.bind("<Configure>", self._on_scroll_canvas_configured)
+        canvas.bind("<Enter>", self._bind_mousewheel)
+        canvas.bind("<Leave>", self._unbind_mousewheel)
+
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(3, weight=1)
 
@@ -238,14 +295,14 @@ class PlaylistGeneratorApp:
             text="VLC Playlist Generator",
             style="Title.TLabel",
         ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
+        self._add_wrapped_label(
             header,
             text=(
                 "Build shuffled playlists and copy normalized audio without "
                 "changing originals."
             ),
             style="HeaderHelp.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
         self.theme_button = ttk.Button(
             header,
             text="Light Mode",
@@ -304,13 +361,13 @@ class PlaylistGeneratorApp:
             pady=(12, 0),
         )
         playlist_actions.columnconfigure(0, weight=1)
-        ttk.Label(
+        self._add_wrapped_label(
             playlist_actions,
             text=ABSOLUTE_PATH_WARNING,
-            wraplength=620,
             justify="left",
             style="Help.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+            reserve_width=180,
+        ).grid(row=0, column=0, sticky="ew")
         self.generate_button = ttk.Button(
             playlist_actions,
             text="Generate Playlist",
@@ -362,16 +419,16 @@ class PlaylistGeneratorApp:
             pady=(12, 0),
         )
         normalization_actions.columnconfigure(0, weight=1)
-        ttk.Label(
+        self._add_wrapped_label(
             normalization_actions,
             text=(
                 "FFmpeg is required for normalization; playlist generation "
                 "does not need it."
             ),
-            wraplength=620,
             justify="left",
             style="Help.TLabel",
-        ).grid(row=0, column=0, sticky="w")
+            reserve_width=290,
+        ).grid(row=0, column=0, sticky="ew")
         self.install_ffmpeg_button = ttk.Button(
             normalization_actions,
             text="Install FFmpeg",
@@ -394,6 +451,7 @@ class PlaylistGeneratorApp:
             description="Progress, results, and validation messages appear here.",
         )
         status_frame.rowconfigure(1, weight=1)
+        status_frame.columnconfigure(0, weight=1)
         status = tk.Text(
             status_frame,
             height=7,
@@ -403,10 +461,86 @@ class PlaylistGeneratorApp:
             padx=12,
             pady=10,
         )
-        status.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=(10, 0))
+        status_scrollbar = ttk.Scrollbar(
+            status_frame,
+            orient="vertical",
+            command=status.yview,
+        )
+        status.configure(yscrollcommand=status_scrollbar.set)
+        status.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(10, 0))
+        status_scrollbar.grid(row=1, column=2, sticky="ns", pady=(10, 0))
         status.insert("1.0", self.status_text.get())
         status.configure(state="disabled")
         self.status_widget = status
+        self.status_scrollbar = status_scrollbar
+
+    def _on_scroll_content_configured(self, event: tk.Event) -> None:
+        if self.scroll_canvas is None:
+            return
+        self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all"))
+
+    def _on_scroll_canvas_configured(self, event: tk.Event) -> None:
+        if self.scroll_canvas is None or self.scroll_window is None:
+            return
+        self.scroll_canvas.itemconfigure(self.scroll_window, width=event.width)
+        self._update_wraplengths(event.width)
+
+    def _bind_mousewheel(self, event: tk.Event) -> None:
+        self.root.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.root.bind_all("<Button-4>", self._on_mousewheel)
+        self.root.bind_all("<Button-5>", self._on_mousewheel)
+
+    def _unbind_mousewheel(self, event: tk.Event) -> None:
+        self.root.unbind_all("<MouseWheel>")
+        self.root.unbind_all("<Button-4>")
+        self.root.unbind_all("<Button-5>")
+
+    def _on_mousewheel(self, event: tk.Event) -> None:
+        if self.scroll_canvas is None:
+            return
+        units = self._scroll_units(event)
+        if units:
+            self.scroll_canvas.yview_scroll(units, "units")
+
+    @staticmethod
+    def _scroll_units(event: tk.Event) -> int:
+        button_number = getattr(event, "num", None)
+        if button_number == 4:
+            return -3
+        if button_number == 5:
+            return 3
+
+        delta = getattr(event, "delta", 0)
+        if delta > 0:
+            return -max(1, abs(delta) // 120)
+        if delta < 0:
+            return max(1, abs(delta) // 120)
+        return 0
+
+    def _add_wrapped_label(
+        self,
+        parent: ttk.Widget,
+        *,
+        text: str,
+        style: str,
+        justify: str = "left",
+        reserve_width: int = 0,
+    ) -> ttk.Label:
+        label = ttk.Label(parent, text=text, justify=justify, style=style)
+        self.wrapped_labels.append((label, reserve_width))
+        label.bind(
+            "<Configure>",
+            lambda event, label=label: self._set_label_wraplength(label, event.width),
+        )
+        return label
+
+    def _update_wraplengths(self, container_width: int) -> None:
+        for label, reserve_width in self.wrapped_labels:
+            self._set_label_wraplength(label, container_width - reserve_width)
+
+    @staticmethod
+    def _set_label_wraplength(label: ttk.Label, width: int) -> None:
+        label.configure(wraplength=max(MIN_WRAP_LENGTH, width))
 
     def _create_section(
         self,
@@ -425,10 +559,9 @@ class PlaylistGeneratorApp:
             column=0,
             sticky="w",
         )
-        ttk.Label(
+        self._add_wrapped_label(
             section,
             text=description,
-            wraplength=720,
             justify="left",
             style="Help.TLabel",
         ).grid(row=0, column=1, columnspan=2, sticky="ew", padx=(18, 0))
@@ -459,10 +592,9 @@ class PlaylistGeneratorApp:
             column=0,
             sticky="ew",
         )
-        ttk.Label(
+        self._add_wrapped_label(
             field_frame,
             text=help_text,
-            wraplength=520,
             justify="left",
             style="Help.TLabel",
         ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
@@ -489,13 +621,12 @@ class PlaylistGeneratorApp:
             textvariable=self.insert_every,
             width=12,
         ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
+        self._add_wrapped_label(
             field_frame,
             text=(
                 "Number of regular songs played before the special audio "
                 "file is inserted."
             ),
-            wraplength=520,
             justify="left",
             style="Help.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
@@ -509,6 +640,8 @@ class PlaylistGeneratorApp:
     def apply_theme(self) -> None:
         colors = THEME_COLORS[self.theme_name.get()]
         self.root.configure(background=colors["background"])
+        if self.scroll_canvas is not None:
+            self.scroll_canvas.configure(background=colors["background"])
 
         self.style.configure("App.TFrame", background=colors["background"])
         self.style.configure(

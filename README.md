@@ -121,6 +121,8 @@ generation and volume normalization are shown as separate sections with
 separate source-folder inputs so you can generate a playlist from one folder and
 normalize audio from another. Normalization writes Opus 160k `.opus` copies to
 the selected normalized output folder and leaves the original files in place.
+The window adapts to compact or scaled displays and scrolls when the full form
+does not fit on screen.
 
 ## Windows EXE
 
