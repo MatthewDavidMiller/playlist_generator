@@ -8,6 +8,8 @@ import pytest
 import playlist_generator.audio_normalization as normalization
 from playlist_generator.audio_normalization import (
     LOUDNORM_ANALYSIS_FILTER,
+    VolumeNormalizationControl,
+    VolumeNormalizationProgress,
     build_ffmpeg_encode_command,
     build_ffmpeg_loudnorm_analysis_command,
     normalize_audio_directory,
@@ -299,3 +301,137 @@ def test_normalize_audio_directory_skips_existing_output_tree_files(
     assert result.normalized_file_count == 1
     assert result.skipped_file_count == 1
     assert (output_directory / "song-01.opus").read_bytes() == b"normalized"
+
+
+def test_normalize_audio_directory_skips_existing_destination_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_directory = tmp_path / "music"
+    output_directory = tmp_path / "normalized"
+    source_directory.mkdir()
+    output_directory.mkdir()
+    (source_directory / "song-01.mp3").touch()
+    (output_directory / "song-01.opus").write_bytes(b"already done")
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", LOUDNORM_JSON)
+
+    monkeypatch.setattr(normalization.subprocess, "run", fake_run)
+
+    result = normalize_audio_directory(
+        source_directory,
+        output_directory,
+        ffmpeg_executable="ffmpeg",
+    )
+
+    assert result.normalized_file_count == 0
+    assert result.skipped_file_count == 1
+    assert commands == []
+    assert (output_directory / "song-01.opus").read_bytes() == b"already done"
+
+
+def test_run_ffmpeg_command_hides_windows_console_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_kwargs: dict[str, object] = {}
+    monkeypatch.setattr(
+        normalization.subprocess, "CREATE_NO_WINDOW", 123, raising=False
+    )
+
+    def fake_run(
+        command: list[str],
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        observed_kwargs.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(normalization.subprocess, "run", fake_run)
+
+    normalization.run_ffmpeg_command(["ffmpeg"], error_message="failed")
+
+    assert observed_kwargs["creationflags"] == 123
+    assert observed_kwargs["capture_output"] is True
+    assert observed_kwargs["text"] is True
+
+
+def test_normalize_audio_directory_reports_progress_for_normalized_and_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_directory = tmp_path / "music"
+    output_directory = tmp_path / "normalized"
+    source_directory.mkdir()
+    output_directory.mkdir()
+    (source_directory / "song-01.mp3").touch()
+    (source_directory / "song-02.mp3").touch()
+    (output_directory / "song-02.opus").touch()
+    progress_events: list[VolumeNormalizationProgress] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        if command[-2:] == ["null", "-"]:
+            return subprocess.CompletedProcess(command, 0, "", LOUDNORM_JSON)
+        Path(command[-1]).write_bytes(b"normalized")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(normalization.subprocess, "run", fake_run)
+
+    result = normalize_audio_directory(
+        source_directory,
+        output_directory,
+        ffmpeg_executable="ffmpeg",
+        progress_callback=progress_events.append,
+    )
+
+    assert result.normalized_file_count == 1
+    assert result.skipped_file_count == 1
+    assert [
+        (event.action, event.completed_file_count) for event in progress_events
+    ] == [
+        ("skipped", 1),
+        ("normalizing", 1),
+        ("completed", 2),
+    ]
+    assert all(event.total_file_count == 2 for event in progress_events)
+    assert progress_events[-1].normalized_file_count == 1
+    assert progress_events[-1].skipped_file_count == 1
+
+
+def test_normalize_audio_directory_stop_between_files_returns_partial_counts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source_directory = tmp_path / "music"
+    output_directory = tmp_path / "normalized"
+    source_directory.mkdir()
+    (source_directory / "song-01.mp3").touch()
+    (source_directory / "song-02.mp3").touch()
+    control = VolumeNormalizationControl()
+    encode_count = 0
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        nonlocal encode_count
+        if command[-2:] == ["null", "-"]:
+            return subprocess.CompletedProcess(command, 0, "", LOUDNORM_JSON)
+        encode_count += 1
+        Path(command[-1]).write_bytes(b"normalized")
+        control.stop()
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(normalization.subprocess, "run", fake_run)
+
+    result = normalize_audio_directory(
+        source_directory,
+        output_directory,
+        ffmpeg_executable="ffmpeg",
+        control=control,
+    )
+
+    assert result.stopped
+    assert result.normalized_file_count == 1
+    assert result.skipped_file_count == 0
+    assert encode_count == 1
+    assert (output_directory / "song-01.opus").exists()
+    assert not (output_directory / "song-02.opus").exists()

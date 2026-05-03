@@ -7,6 +7,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +32,7 @@ LOUDNORM_REQUIRED_FIELDS = (
     "target_offset",
 )
 NORMALIZED_AUDIO_SUFFIX = ".opus"
+NORMALIZATION_POLL_SECONDS = 0.1
 
 
 @dataclass(frozen=True)
@@ -37,6 +41,51 @@ class VolumeNormalizationResult:
     output_directory: str
     normalized_file_count: int
     skipped_file_count: int
+    stopped: bool = False
+
+
+@dataclass(frozen=True)
+class VolumeNormalizationProgress:
+    total_file_count: int
+    completed_file_count: int
+    normalized_file_count: int
+    skipped_file_count: int
+    current_source_path: str
+    action: str
+
+
+ProgressCallback = Callable[[VolumeNormalizationProgress], None]
+
+
+class VolumeNormalizationControl:
+    def __init__(self) -> None:
+        self._paused = threading.Event()
+        self._stopped = threading.Event()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused.is_set()
+
+    @property
+    def is_stopped(self) -> bool:
+        return self._stopped.is_set()
+
+    def pause(self) -> None:
+        self._paused.set()
+
+    def resume(self) -> None:
+        self._paused.clear()
+
+    def stop(self) -> None:
+        self._stopped.set()
+        self.resume()
+
+    def wait_if_paused(self) -> None:
+        while self.is_paused and not self.is_stopped:
+            time.sleep(NORMALIZATION_POLL_SECONDS)
+
+    def should_stop(self) -> bool:
+        return self.is_stopped
 
 
 def find_ffmpeg() -> str | None:
@@ -150,11 +199,13 @@ def run_ffmpeg_command(
     *,
     error_message: str,
 ) -> subprocess.CompletedProcess[str]:
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     completed = subprocess.run(
         command,
         check=False,
         capture_output=True,
         text=True,
+        creationflags=creationflags,
     )
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
@@ -236,6 +287,8 @@ def normalize_audio_directory(
     output_directory: os.PathLike[str] | str,
     *,
     ffmpeg_executable: str | None = None,
+    progress_callback: ProgressCallback | None = None,
+    control: VolumeNormalizationControl | None = None,
 ) -> VolumeNormalizationResult:
     resolved_ffmpeg = ffmpeg_executable or find_ffmpeg()
     if resolved_ffmpeg is None:
@@ -263,8 +316,26 @@ def normalize_audio_directory(
 
     normalized_count = 0
     skipped_count = 0
+    completed_count = 0
+    stopped = False
     normalization_jobs: list[tuple[Path, Path]] = []
     destinations: dict[str, Path] = {}
+    total_count = len(audio_files)
+
+    def report(source_file: Path, action: str) -> None:
+        if progress_callback is None:
+            return
+        progress_callback(
+            VolumeNormalizationProgress(
+                total_file_count=total_count,
+                completed_file_count=completed_count,
+                normalized_file_count=normalized_count,
+                skipped_file_count=skipped_count,
+                current_source_path=str(source_file),
+                action=action,
+            )
+        )
+
     for audio_file in audio_files:
         source_file = Path(audio_file)
         try:
@@ -273,12 +344,22 @@ def normalize_audio_directory(
             pass
         else:
             skipped_count += 1
+            completed_count += 1
+            report(source_file, "skipped")
             continue
 
         relative_path = source_file.relative_to(source_path)
         destination = normalized_audio_output_path(output_path / relative_path)
         if same_path(source_file, destination):
             skipped_count += 1
+            completed_count += 1
+            report(source_file, "skipped")
+            continue
+
+        if destination.exists():
+            skipped_count += 1
+            completed_count += 1
+            report(source_file, "skipped")
             continue
 
         destination_key = os.path.normcase(str(destination))
@@ -292,16 +373,32 @@ def normalize_audio_directory(
         normalization_jobs.append((source_file, destination))
 
     for source_file, destination in normalization_jobs:
+        if control is not None:
+            if control.is_paused:
+                report(source_file, "paused")
+            control.wait_if_paused()
+            if control.should_stop():
+                stopped = True
+                report(source_file, "stopped")
+                break
+
+        report(source_file, "normalizing")
         normalize_audio_file(
             source_file,
             destination,
             ffmpeg_executable=resolved_ffmpeg,
         )
         normalized_count += 1
+        completed_count += 1
+        report(source_file, "completed")
+
+        if control is not None and control.should_stop():
+            stopped = True
 
     return VolumeNormalizationResult(
         source_directory=str(source_path),
         output_directory=str(output_path),
         normalized_file_count=normalized_count,
         skipped_file_count=skipped_count,
+        stopped=stopped,
     )

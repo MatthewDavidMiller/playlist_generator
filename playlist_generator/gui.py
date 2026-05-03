@@ -12,6 +12,8 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Generic, TypeVar
 
 from .audio_normalization import (
+    VolumeNormalizationControl,
+    VolumeNormalizationProgress,
     VolumeNormalizationResult,
     normalize_audio_directory,
 )
@@ -96,10 +98,15 @@ def run_generation_request(request: PlaylistGenerationRequest) -> PlaylistResult
 
 def run_normalization_request(
     request: VolumeNormalizationRequest,
+    *,
+    progress_callback: Callable[[VolumeNormalizationProgress], None] | None = None,
+    control: VolumeNormalizationControl | None = None,
 ) -> VolumeNormalizationResult:
     return normalize_audio_directory(
         source_directory=request.source_directory,
         output_directory=request.output_directory,
+        progress_callback=progress_callback,
+        control=control,
     )
 
 
@@ -203,6 +210,13 @@ class PlaylistGeneratorApp:
         self.status_widget: tk.Text | None = None
         self.status_scrollbar: ttk.Scrollbar | None = None
         self.theme_button: ttk.Button | None = None
+        self.normalize_button: ttk.Button | None = None
+        self.pause_normalization_button: ttk.Button | None = None
+        self.resume_normalization_button: ttk.Button | None = None
+        self.stop_normalization_button: ttk.Button | None = None
+        self.normalization_progressbar: ttk.Progressbar | None = None
+        self.normalization_progress_text = tk.StringVar(value="0 / 0 files processed")
+        self.normalization_control: VolumeNormalizationControl | None = None
         self.scroll_canvas: tk.Canvas | None = None
         self.scrollable_content: ttk.Frame | None = None
         self.scroll_window: int | None = None
@@ -216,7 +230,7 @@ class PlaylistGeneratorApp:
         self.normalization_runner = BackgroundGenerationRunner[
             VolumeNormalizationRequest, VolumeNormalizationResult
         ](
-            generator=run_normalization_request,
+            generator=self._run_normalization_request,
             schedule=lambda callback: self.root.after(0, callback),
         )
         self.ffmpeg_install_runner = BackgroundGenerationRunner[
@@ -443,6 +457,61 @@ class PlaylistGeneratorApp:
             style="Accent.TButton",
         )
         self.normalize_button.grid(row=0, column=2, sticky="e")
+        self.pause_normalization_button = ttk.Button(
+            normalization_actions,
+            text="Pause",
+            command=self.pause_normalization,
+            style="Secondary.TButton",
+        )
+        self.pause_normalization_button.grid(row=1, column=0, sticky="e", pady=(8, 0))
+        self.resume_normalization_button = ttk.Button(
+            normalization_actions,
+            text="Resume",
+            command=self.resume_normalization,
+            style="Secondary.TButton",
+        )
+        self.resume_normalization_button.grid(
+            row=1,
+            column=1,
+            sticky="e",
+            padx=(8, 0),
+            pady=(8, 0),
+        )
+        self.stop_normalization_button = ttk.Button(
+            normalization_actions,
+            text="Stop",
+            command=self.stop_normalization,
+            style="Secondary.TButton",
+        )
+        self.stop_normalization_button.grid(
+            row=1,
+            column=2,
+            sticky="e",
+            pady=(8, 0),
+        )
+
+        progress_frame = ttk.Frame(normalization_section, style="Card.TFrame")
+        progress_frame.grid(
+            row=4,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            pady=(10, 0),
+        )
+        progress_frame.columnconfigure(0, weight=1)
+        self.normalization_progressbar = ttk.Progressbar(
+            progress_frame,
+            orient="horizontal",
+            mode="determinate",
+            maximum=1,
+            value=0,
+        )
+        self.normalization_progressbar.grid(row=0, column=0, sticky="ew")
+        ttk.Label(
+            progress_frame,
+            textvariable=self.normalization_progress_text,
+            style="Help.TLabel",
+        ).grid(row=0, column=1, sticky="e", padx=(12, 0))
 
         status_frame = self._create_section(
             frame,
@@ -473,6 +542,7 @@ class PlaylistGeneratorApp:
         status.configure(state="disabled")
         self.status_widget = status
         self.status_scrollbar = status_scrollbar
+        self._set_normalization_control_states(running=False, paused=False)
 
     def _on_scroll_content_configured(self, event: tk.Event) -> None:
         if self.scroll_canvas is None:
@@ -866,7 +936,21 @@ class PlaylistGeneratorApp:
         self.generate_button.configure(state="disabled" if active else "normal")
 
     def set_normalization_active(self, active: bool) -> None:
-        self.normalize_button.configure(state="disabled" if active else "normal")
+        self._set_normalization_control_states(running=active, paused=False)
+
+    def _set_normalization_control_states(self, *, running: bool, paused: bool) -> None:
+        if self.normalize_button is not None:
+            self.normalize_button.configure(state="disabled" if running else "normal")
+        if self.pause_normalization_button is not None:
+            state = "normal" if running and not paused else "disabled"
+            self.pause_normalization_button.configure(state=state)
+        if self.resume_normalization_button is not None:
+            state = "normal" if running and paused else "disabled"
+            self.resume_normalization_button.configure(state=state)
+        if self.stop_normalization_button is not None:
+            self.stop_normalization_button.configure(
+                state="normal" if running else "disabled"
+            )
 
     def set_ffmpeg_install_active(self, active: bool) -> None:
         self.install_ffmpeg_button.configure(state="disabled" if active else "normal")
@@ -900,6 +984,27 @@ class PlaylistGeneratorApp:
             on_success=self._on_normalization_succeeded,
             on_error=self._on_normalization_failed,
         )
+
+    def pause_normalization(self) -> None:
+        if self.normalization_control is None:
+            return
+        self.normalization_control.pause()
+        self._set_normalization_control_states(running=True, paused=True)
+        self.set_status("Normalization paused. The current file will finish first.")
+
+    def resume_normalization(self) -> None:
+        if self.normalization_control is None:
+            return
+        self.normalization_control.resume()
+        self._set_normalization_control_states(running=True, paused=False)
+        self.set_status("Resuming normalization...")
+
+    def stop_normalization(self) -> None:
+        if self.normalization_control is None:
+            return
+        self.normalization_control.stop()
+        self._set_normalization_control_states(running=True, paused=False)
+        self.set_status("Stopping normalization after the current file...")
 
     def install_ffmpeg(self) -> None:
         plan = build_ffmpeg_install_plan()
@@ -969,26 +1074,100 @@ class PlaylistGeneratorApp:
         messagebox.showerror("Generation Failed", message, parent=self.root)
 
     def _on_normalization_started(self) -> None:
+        self.normalization_control = VolumeNormalizationControl()
+        self._update_normalization_progress(
+            completed_file_count=0,
+            total_file_count=0,
+        )
         self.set_normalization_active(True)
         self.set_status("Normalizing audio files...")
+
+    def _run_normalization_request(
+        self,
+        request: VolumeNormalizationRequest,
+    ) -> VolumeNormalizationResult:
+        return run_normalization_request(
+            request,
+            progress_callback=self._schedule_normalization_progress,
+            control=self.normalization_control,
+        )
+
+    def _schedule_normalization_progress(
+        self,
+        progress: VolumeNormalizationProgress,
+    ) -> None:
+        self.root.after(
+            0,
+            lambda captured_progress=progress: self._on_normalization_progress(
+                captured_progress
+            ),
+        )
+
+    def _on_normalization_progress(
+        self,
+        progress: VolumeNormalizationProgress,
+    ) -> None:
+        self._update_normalization_progress(
+            completed_file_count=progress.completed_file_count,
+            total_file_count=progress.total_file_count,
+        )
+        source_name = Path(progress.current_source_path).name
+        status_by_action = {
+            "normalizing": "Normalizing",
+            "skipped": "Skipped",
+            "completed": "Completed",
+            "paused": "Paused",
+            "stopped": "Stopped before",
+        }
+        action_text = status_by_action.get(progress.action, progress.action.title())
+        self.set_status(
+            "\n".join(
+                [
+                    f"{action_text}: {source_name}",
+                    (
+                        f"{progress.completed_file_count} / "
+                        f"{progress.total_file_count} files processed"
+                    ),
+                    f"Files normalized: {progress.normalized_file_count}",
+                    f"Files skipped: {progress.skipped_file_count}",
+                ]
+            )
+        )
+
+    def _update_normalization_progress(
+        self,
+        *,
+        completed_file_count: int,
+        total_file_count: int,
+    ) -> None:
+        if self.normalization_progressbar is not None:
+            self.normalization_progressbar.configure(maximum=max(1, total_file_count))
+            self.normalization_progressbar.configure(value=completed_file_count)
+        self.normalization_progress_text.set(
+            f"{completed_file_count} / {total_file_count} files processed"
+        )
 
     def _on_normalization_succeeded(
         self,
         result: VolumeNormalizationResult,
     ) -> None:
         self.set_normalization_active(False)
+        self.normalization_control = None
+        verb = "Normalization stopped" if result.stopped else "Normalized audio written"
         message = "\n".join(
             [
-                f"Normalized audio written to: {result.output_directory}",
+                f"{verb} at: {result.output_directory}",
                 f"Files normalized: {result.normalized_file_count}",
                 f"Files skipped: {result.skipped_file_count}",
             ]
         )
         self.set_status(message)
-        messagebox.showinfo("Success", message, parent=self.root)
+        title = "Stopped" if result.stopped else "Success"
+        messagebox.showinfo(title, message, parent=self.root)
 
     def _on_normalization_failed(self, error: Exception) -> None:
         self.set_normalization_active(False)
+        self.normalization_control = None
         if isinstance(error, PlaylistGeneratorError):
             message = str(error)
         else:

@@ -100,7 +100,9 @@ python3 -m playlist_generator normalize-volume \
 The normalization command preserves relative subfolders under the output
 directory, encodes normalized copies as Opus 160k `.opus` files with two-pass
 FFmpeg loudness normalization, and skips files that would overwrite their source
-path or already live under the output directory.
+path, already live under the output directory, or already have a normalized
+`.opus` output file. Rerunning normalization against the same output directory
+resumes by skipping completed files.
 
 ## GUI Usage
 
@@ -120,9 +122,10 @@ The GUI opens in dark mode and includes a Light/Dark toggle. Playlist
 generation and volume normalization are shown as separate sections with
 separate source-folder inputs so you can generate a playlist from one folder and
 normalize audio from another. Normalization writes Opus 160k `.opus` copies to
-the selected normalized output folder and leaves the original files in place.
-The window adapts to compact or scaled displays and scrolls when the full form
-does not fit on screen.
+the selected normalized output folder and leaves the original files in place. It
+shows file progress while running and supports pausing, resuming, or stopping
+between files. The window adapts to compact or scaled displays and scrolls when
+the full form does not fit on screen.
 
 ## Windows EXE
 

@@ -6,6 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from playlist_generator import gui
+from playlist_generator.audio_normalization import (
+    VolumeNormalizationControl,
+    VolumeNormalizationProgress,
+    VolumeNormalizationResult,
+)
 from playlist_generator.core import PlaylistResult, PlaylistValidationError
 from playlist_generator.gui import (
     BackgroundGenerationRunner,
@@ -45,7 +50,7 @@ def build_normalization_request(tmp_path: Path) -> VolumeNormalizationRequest:
 def build_unrendered_app() -> PlaylistGeneratorApp:
     master = tk.Tcl()
     app = object.__new__(PlaylistGeneratorApp)
-    app.root = None
+    app.root = SimpleNamespace(after=lambda _delay, callback: callback())
     app.playlist_source_directory = tk.StringVar(master=master)
     app.normalization_source_directory = tk.StringVar(master=master)
     app.source_directory = app.playlist_source_directory
@@ -55,6 +60,13 @@ def build_unrendered_app() -> PlaylistGeneratorApp:
     app.insert_every = tk.IntVar(master=master, value=5)
     app.status_text = tk.StringVar(master=master)
     app.status_widget = None
+    app.normalization_progress_text = tk.StringVar(master=master)
+    app.normalization_progressbar = None
+    app.normalize_button = SimpleNamespace(configure=lambda **kwargs: None)
+    app.pause_normalization_button = SimpleNamespace(configure=lambda **kwargs: None)
+    app.resume_normalization_button = SimpleNamespace(configure=lambda **kwargs: None)
+    app.stop_normalization_button = SimpleNamespace(configure=lambda **kwargs: None)
+    app.normalization_control = None
     return app
 
 
@@ -280,3 +292,72 @@ def test_gui_normalization_source_suggests_normalized_output(
     assert app.normalized_output_directory.get() == str(
         tmp_path / "raw-audio-normalized"
     )
+
+
+def test_gui_pause_resume_stop_control_normalization() -> None:
+    app = build_unrendered_app()
+    control = VolumeNormalizationControl()
+    app.normalization_control = control
+
+    app.pause_normalization()
+
+    assert control.is_paused
+    assert "paused" in app.status_text.get()
+
+    app.resume_normalization()
+
+    assert not control.is_paused
+    assert "Resuming" in app.status_text.get()
+
+    app.stop_normalization()
+
+    assert control.is_stopped
+    assert "Stopping" in app.status_text.get()
+
+
+def test_gui_normalization_progress_updates_status_and_counts(tmp_path: Path) -> None:
+    app = build_unrendered_app()
+
+    app._on_normalization_progress(
+        VolumeNormalizationProgress(
+            total_file_count=50,
+            completed_file_count=12,
+            normalized_file_count=10,
+            skipped_file_count=2,
+            current_source_path=str(tmp_path / "song.mp3"),
+            action="completed",
+        )
+    )
+
+    assert app.normalization_progress_text.get() == "12 / 50 files processed"
+    assert "Completed: song.mp3" in app.status_text.get()
+    assert "Files normalized: 10" in app.status_text.get()
+    assert "Files skipped: 2" in app.status_text.get()
+
+
+def test_gui_normalization_success_message_includes_stopped_and_counts(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = build_unrendered_app()
+    shown_messages: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        gui.messagebox,
+        "showinfo",
+        lambda title, message, **_: shown_messages.append((title, message)),
+    )
+
+    app._on_normalization_succeeded(
+        VolumeNormalizationResult(
+            source_directory=str(tmp_path / "music"),
+            output_directory=str(tmp_path / "normalized"),
+            normalized_file_count=3,
+            skipped_file_count=4,
+            stopped=True,
+        )
+    )
+
+    assert shown_messages == [("Stopped", app.status_text.get())]
+    assert "Normalization stopped" in app.status_text.get()
+    assert "Files normalized: 3" in app.status_text.get()
+    assert "Files skipped: 4" in app.status_text.get()
