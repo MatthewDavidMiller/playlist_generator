@@ -1,152 +1,107 @@
 # Testing Guide
 
-This document is the testing and validation reference for the repository. For
-application behavior and runtime usage, see [README.md](../README.md). For
-overall maintainer workflow, see [docs/maintainer-guide.md](maintainer-guide.md).
+This is the validation reference for the repository. For user behavior, see
+[README.md](../README.md). For architecture and release workflow, see
+[docs/maintainer-guide.md](maintainer-guide.md).
 
-## Tooling Source Of Truth
+## Sources of Truth
 
-Validation behavior is defined in two files:
-
-- [pyproject.toml](../pyproject.toml) for `pytest` and `ruff` configuration.
-- [.pre-commit-config.yaml](../.pre-commit-config.yaml) for the commit-time
-  hook pipeline.
-
-The pinned Windows CI dependency set lives in
-[requirements/windows-ci-lock.txt](../requirements/windows-ci-lock.txt).
-
-When commands or rules change, update those files first and then update this
-document to match.
-
-## Environment
-
-Use Python 3.9 or newer. Install the project and development dependencies in
-the active environment:
-
-```bash
-python -m pip install -e ".[dev]"
-```
-
-If you need to build Windows executables from the repository, also install the
-optional packaging dependency:
-
-```bash
-python -m pip install -e ".[windows-build]"
-```
-
-The local hook configuration uses `pre-commit` managed Python environments, so
-it does not depend on a hardcoded `.venv/bin/python` path or on a particular
-shell-specific interpreter location.
+- [Directory.Build.props](../Directory.Build.props) defines compiler,
+  analyzer, deterministic-build, and lock-file rules.
+- [Directory.Packages.props](../Directory.Packages.props) pins package versions.
+- [global.json](../global.json) selects the .NET 10 SDK.
+- [`scripts/validate.sh`](../scripts/validate.sh) defines the pre-commit
+  pipeline.
 
 ## Validation Commands
 
-Run the checks in this order when you want the clearest failure signals:
+Run the same full pipeline as the Git hook:
 
 ```bash
-python -m ruff check .
-python -m ruff format --check .
-python -m pytest
-python -m pre_commit run --all-files
+./scripts/validate.sh
 ```
 
-For the Windows packaging helper, use:
+For isolated diagnostics, run its commands in order:
 
 ```bash
-python -m playlist_generator.windows_build --dry-run
+dotnet restore PlaylistGenerator.slnx --locked-mode
+dotnet format PlaylistGenerator.slnx --no-restore --verify-no-changes
+dotnet build PlaylistGenerator.slnx \
+  --configuration Release \
+  --no-restore \
+  --disable-build-servers \
+  --maxcpucount:1
+dotnet test PlaylistGenerator.slnx \
+  --configuration Release \
+  --no-build \
+  --no-restore \
+  --disable-build-servers \
+  --maxcpucount:1
 ```
 
-To verify the pinned Windows CI dependency set locally, use:
+Warnings are errors. Package restore must match committed lock files.
+
+## Code Coverage
+
+The xUnit v3 project uses the .NET test SDK and Coverlet collector. Generate
+Cobertura coverage with:
 
 ```bash
-python -m pip_audit --strict -r requirements/windows-ci-lock.txt
+dotnet test PlaylistGenerator.slnx \
+  --collect:"XPlat Code Coverage" \
+  --results-directory TestResults
 ```
 
-## What Each Command Covers
+The report is written below the test project's `TestResults` output.
 
-### `ruff check .`
+## Test Scope
 
-Runs lint rules for Python correctness and maintainability. The current rule
-selection includes:
+The suite covers:
 
-- `E` and `F` for pycodestyle and pyflakes issues.
-- `I` for import sorting.
-- `B` for common bugbear findings.
-- `UP` for safe Python upgrade suggestions.
+- Recursive audio discovery, extension handling, ordering, validation, and
+  symbolic-link boundaries.
+- Pure interval-playlist composition, special-file exclusion, UTF-8 output,
+  and preservation of an existing playlist when input disappears.
+- FFmpeg argument construction without shell parsing.
+- Real process argument boundaries, diagnostics, start failures, process-tree
+  cancellation, executable permissions, and FFmpeg installation advice.
+- Loudness JSON extraction and malformed/missing-field diagnostics.
+- Recursive normalization, relative paths, Opus settings, output-tree skips,
+  resumable existing outputs, parent/child output layouts, destination
+  collisions, progress, pause, cancellation, FFmpeg failures, and missing
+  output after a false-success process result.
+- CLI parsing, JSON contracts, usage errors, expected failures, normalization,
+  and non-executing FFmpeg installation advice.
+- View-model path suggestions, request mapping, status and diagnostic state,
+  theme delegation, and pause/resume/stop coordination.
+- AXAML compiled bindings and platform adapter compatibility through the
+  Release solution build.
 
-If you want lint auto-fixes before rerunning verification, use:
+Add regression tests for every defect fixed. Prefer core and view-model tests
+over tests that require a display server.
+
+## Release Build Validation
+
+Inspect publish commands without restoring runtime packs:
 
 ```bash
-python -m ruff check . --fix
+./scripts/build-release.sh --dry-run
 ```
 
-### `ruff format --check .`
-
-Verifies formatting without rewriting files. Use `python -m ruff format .` to
-apply formatting changes locally.
-
-### `pytest`
-
-Runs the automated test suite under `tests/` using the repository configuration
-from [pyproject.toml](../pyproject.toml). The suite currently covers:
-
-- Shared playlist generation behavior in `tests/test_playlist_generator.py`.
-- FFmpeg-backed two-pass Opus volume normalization behavior in
-  `tests/test_audio_normalization.py`.
-- Guided FFmpeg install command detection in `tests/test_ffmpeg_setup.py`.
-- CLI behavior and failure handling in `tests/test_cli.py`.
-- GUI background generation and normalization state handling in
-  `tests/test_gui.py`.
-- Windows packaging command construction in `tests/test_windows_build.py`.
-
-Coverage reporting is enabled by default through the pytest configuration.
-
-### `pre_commit run --all-files`
-
-Executes the same pipeline enforced by the git hook across the full repository.
-Use this before a commit when you want to confirm hook behavior explicitly.
-
-### `playlist_generator.windows_build --dry-run`
-
-Prints the resolved PyInstaller command line without invoking the packager. This
-is the repository-safe validation step for packaging logic on any platform. The
-actual executable produced by PyInstaller is platform-specific, so a Windows
-`.exe` must still be built on Windows.
-
-## CI Coverage
-
-GitHub Actions workflow
-[`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
-provides the Windows-side validation that cannot be completed from Linux or
-macOS alone. The read-only build job runs for tag pushes matching `v*` and for
-manual dispatches, installs the pinned dependency set from
-[requirements/windows-ci-lock.txt](../requirements/windows-ci-lock.txt), runs
-`python -m pip_audit --strict`, executes `pytest` on `windows-latest`, builds
-both executables, and uploads `dist/*.exe` as an artifact. For tag pushes
-matching `v*`, a separate publish job downloads that artifact and attaches the
-same `.exe` files to the corresponding GitHub Release.
-
-## Git Hook Behavior
-
-Install the hook once per clone:
+Produce and inspect a real Windows cross-build on Linux:
 
 ```bash
-python -m pre_commit install
+./scripts/build-release.sh --runtime win-x64
+test -x artifacts/win-x64/desktop/PlaylistGenerator.exe
+test -x artifacts/win-x64/cli/playlist-generator.exe
 ```
 
-After installation, each `git commit` runs the local hooks defined in
-[.pre-commit-config.yaml](../.pre-commit-config.yaml):
+The Windows executable bit is a Unix filesystem attribute only; functional GUI
+smoke testing still needs a supported Windows system.
 
-1. `ruff-check`
-2. `ruff-format`
-3. `pytest`
+## Hook Behavior
 
-If the hook fails, the commit is blocked until the failure is fixed and the
-commit is retried.
-
-## Change Expectations
-
-- Any Python behavior change should include or update automated tests.
-- Documentation-only changes do not usually require new tests, but the commands
-  in this guide should remain accurate.
-- If GUI behavior changes, keep the underlying logic covered in automated tests
-  whenever possible rather than relying only on manual Tkinter checks.
+After `./scripts/install-hooks.sh`, every `git commit` runs the full validation
+script. A format, build, analyzer, lock-file, or test failure blocks the commit.
+The repository has no remote CI substitute, so do not bypass the hook without
+running the same script manually.

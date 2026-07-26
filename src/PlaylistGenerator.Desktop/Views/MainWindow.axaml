@@ -1,0 +1,173 @@
+<Window
+    x:Class="PlaylistGenerator.Desktop.Views.MainWindow"
+    x:DataType="vm:MainViewModel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:PlaylistGenerator.Presentation.ViewModels"
+    Title="Playlist Generator"
+    Width="1000"
+    Height="760"
+    MinWidth="720"
+    MinHeight="560"
+    d:DesignWidth="1000"
+    d:DesignHeight="760"
+    mc:Ignorable="d">
+
+  <Grid Margin="24" RowDefinitions="Auto,*,Auto" RowSpacing="18">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Spacing="3">
+        <TextBlock FontSize="30" FontWeight="Bold" Text="Playlist Generator" />
+        <TextBlock Opacity="0.72" Text="Build VLC playlists and normalize audio locally." />
+      </StackPanel>
+      <Button
+          Grid.Column="1"
+          Command="{Binding ToggleThemeCommand}"
+          Content="Toggle theme"
+          ToolTip.Tip="Switch between the light and dark application themes" />
+    </Grid>
+
+    <TabControl Grid.Row="1">
+      <TabItem Header="Create playlist">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <Border Classes="card" Margin="0,12,0,0">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="section-title" Text="Shuffled interval playlist" />
+              <TextBlock
+                  Margin="0,0,0,8"
+                  Opacity="0.72"
+                  Text="A special audio file is inserted after each complete group of tracks." />
+
+              <TextBlock Classes="field-label" Text="Music folder" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox
+                    PlaceholderText="/path/to/music"
+                    Text="{Binding PlaylistSourceDirectory}" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding BrowsePlaylistSourceCommand}"
+                    Content="Browse…" />
+              </Grid>
+
+              <TextBlock Classes="field-label" Text="Special audio file" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox
+                    PlaceholderText="/path/to/station-id.mp3"
+                    Text="{Binding SpecialFile}" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding BrowseSpecialFileCommand}"
+                    Content="Browse…" />
+              </Grid>
+
+              <TextBlock Classes="field-label" Text="Insert after this many tracks" />
+              <NumericUpDown
+                  Width="150"
+                  HorizontalAlignment="Left"
+                  Minimum="1"
+                  Maximum="100000"
+                  Increment="1"
+                  Value="{Binding InsertEvery}" />
+
+              <TextBlock Classes="field-label" Text="Playlist output" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox
+                    PlaceholderText="/path/to/playlist.m3u8"
+                    Text="{Binding OutputPath}" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding BrowsePlaylistOutputCommand}"
+                    Content="Browse…" />
+              </Grid>
+
+              <Button
+                  Classes="primary"
+                  Margin="0,16,0,0"
+                  Command="{Binding GeneratePlaylistCommand}"
+                  Content="Create playlist" />
+            </StackPanel>
+          </Border>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Normalize volume">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <Border Classes="card" Margin="0,12,0,0">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="section-title" Text="Two-pass loudness normalization" />
+              <TextBlock
+                  Margin="0,0,0,8"
+                  Opacity="0.72"
+                  Text="Creates Opus 160k copies. Source files are never changed." />
+
+              <TextBlock Classes="field-label" Text="Source audio folder" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox
+                    PlaceholderText="/path/to/audio"
+                    Text="{Binding NormalizationSourceDirectory}" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding BrowseNormalizationSourceCommand}"
+                    Content="Browse…" />
+              </Grid>
+
+              <TextBlock Classes="field-label" Text="Normalized output folder" />
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox
+                    PlaceholderText="/path/to/audio-normalized"
+                    Text="{Binding NormalizedOutputDirectory}" />
+                <Button
+                    Grid.Column="1"
+                    Command="{Binding BrowseNormalizedOutputCommand}"
+                    Content="Browse…" />
+              </Grid>
+
+              <ProgressBar
+                  Margin="0,16,0,0"
+                  Minimum="0"
+                  Maximum="{Binding ProgressMaximum}"
+                  Value="{Binding ProgressValue}" />
+              <TextBlock Margin="0,4,0,0" Opacity="0.72" Text="{Binding ProgressText}" />
+              <TextBlock
+                  Text="{Binding NormalizedFileCount, StringFormat='Normalized: {0}'}" />
+              <TextBlock Text="{Binding SkippedFileCount, StringFormat='Skipped: {0}'}" />
+
+              <StackPanel Margin="0,16,0,0" Orientation="Horizontal" Spacing="8">
+                <Button
+                    Classes="primary"
+                    Command="{Binding NormalizeVolumeCommand}"
+                    Content="Normalize volume" />
+                <Button
+                    Command="{Binding PauseNormalizationCommand}"
+                    Content="Pause" />
+                <Button
+                    Command="{Binding ResumeNormalizationCommand}"
+                    Content="Resume" />
+                <Button
+                    Command="{Binding StopNormalizationCommand}"
+                    Content="Stop" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+
+    <Border Grid.Row="2" Classes="card" Padding="14">
+      <StackPanel Spacing="5">
+        <TextBlock FontWeight="SemiBold" Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+        <Expander
+            Header="Error details"
+            IsVisible="{Binding HasErrorDetails}">
+          <SelectableTextBlock
+              Margin="0,8,0,0"
+              FontFamily="monospace"
+              FontSize="12"
+              Text="{Binding ErrorDetails}"
+              TextWrapping="Wrap" />
+        </Expander>
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

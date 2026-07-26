@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Platform-neutral MVVM presentation logic for Playlist Generator.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../PlaylistGenerator.Core/PlaylistGenerator.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,81 +1,110 @@
 # Maintainer Guide
 
-User-facing behavior, feature scope, and runtime usage are documented in [README.md](../README.md). This guide only covers local maintenance workflow for the Python codebase.
+User behavior and runtime usage are documented in [README.md](../README.md).
+This guide covers local maintenance of the .NET/Avalonia solution.
 
 ## Local Setup
 
-Create or activate a Python 3.9+ environment, then install the project in
-editable mode with development dependencies:
+Install the .NET 10 SDK selected by [global.json](../global.json), then restore
+the locked dependency graph:
 
 ```bash
-python -m pip install -e ".[dev]"
+dotnet restore PlaylistGenerator.slnx --locked-mode
 ```
 
-Tkinter is required for the desktop GUI. Platform-specific install notes live
-in [README.md](../README.md#requirements).
+FFmpeg is only required for manual volume-normalization testing. Unit tests use
+an in-process fake and do not execute FFmpeg.
 
-Install the Windows packaging dependency only when you need to produce a
-standalone `.exe`:
+## Architecture
+
+Dependencies point inward:
+
+```text
+Avalonia desktop ─┐
+                  ├──> Core models, contracts, and services
+CLI ──────────────┘
+```
+
+- `PlaylistGenerator.Core` owns scanning, playlist composition, atomic writes,
+  FFmpeg command construction, process cancellation, and normalization.
+- `PlaylistGenerator.Presentation` owns the platform-neutral MVVM state and
+  commands.
+- `PlaylistGenerator.Desktop` contains AXAML views, file-picker and theme
+  adapters, composition, and the GUI entry point.
+- `PlaylistGenerator.CommandLine` owns testable command parsing and
+  console/JSON presentation.
+- `PlaylistGenerator.Cli` is the thin console executable host.
+
+Keep operating-system APIs and Avalonia types out of the core project. Add
+domain behavior tests before adding view-specific code.
+
+## Local Git Hook
+
+Install the repository-owned pre-commit hook once per clone:
 
 ```bash
-python -m pip install -e ".[windows-build]"
+./scripts/install-hooks.sh
 ```
 
-## Validation Workflow
+This sets the clone's `core.hooksPath` to `.githooks`. The hook runs
+[`scripts/validate.sh`](../scripts/validate.sh), whose checks are documented in
+[docs/testing.md](testing.md).
 
-Install the repository hook once per clone:
+There is intentionally no GitHub Actions or remote release workflow. Validation
+and release publishing are local and explicit.
+
+## Local Release Builds
+
+Run:
 
 ```bash
-python -m pre_commit install
+./scripts/build-release.sh
 ```
 
-Detailed validation commands, hook behavior, and test scope are documented in
-[docs/testing.md](testing.md). Tool configuration is centralized in
-[pyproject.toml](../pyproject.toml).
+The default publishes self-contained, single-file desktop and CLI applications
+for `win-x64` and `linux-x64`. .NET and Avalonia do not require a Windows
+workload, so Windows `.exe` files can be cross-published from Linux.
 
-## Windows Release Build
+Supported runtime identifiers:
 
-The supported Windows packaging path uses
-[`playlist_generator.windows_build`](../playlist_generator/windows_build.py)
-with checked-in launcher scripts under [`scripts/`](../scripts/). Build the GUI
-executable with:
+- `win-x64`
+- `win-arm64`
+- `linux-x64`
+- `linux-arm64`
+
+Examples:
 
 ```bash
-python -m playlist_generator.windows_build
+./scripts/build-release.sh --runtime win-x64
+./scripts/build-release.sh --runtime win-x64 --runtime linux-arm64
+./scripts/build-release.sh --dry-run
 ```
 
-Useful variants:
+Artifacts go to `artifacts/<runtime>/desktop` and
+`artifacts/<runtime>/cli`. The script does not upload, tag, sign, or delete
+anything. Runtime graphs for every supported RID are declared centrally and
+recorded in the committed lock files; publishing uses locked restore mode.
+Distribution is a separate explicit maintainer action.
 
-- `python -m playlist_generator.windows_build --target both` builds GUI and
-  CLI executables.
-- `python -m playlist_generator.windows_build --onedir` creates unpacked
-  output instead of a single-file executable.
-- `python -m playlist_generator.windows_build --dry-run` prints the resolved
-  PyInstaller command without running it.
+## Dependency Updates
 
-The command writes output to `dist/` and uses `build/pyinstaller/` for work and
-spec files. Those generated directories are ignored by git.
+Package versions are centralized in
+[Directory.Packages.props](../Directory.Packages.props). SDK selection and the
+test runner are centralized in [global.json](../global.json).
 
-For repository automation, [`.github/workflows/windows-exe.yml`](../.github/workflows/windows-exe.yml)
-uses a read-only Windows build job for tag pushes matching `v*` and manual
-dispatches. That job installs the pinned dependency set from
-[`requirements/windows-ci-lock.txt`](../requirements/windows-ci-lock.txt), runs
-`python -m pip_audit`, executes the tests, builds both executables, and uploads
-the resulting `.exe` files as a GitHub Actions artifact. A separate tag-only
-job with `contents: write` reuses that artifact and publishes it to GitHub
-Releases.
+When updating a package:
 
-## Code Scope
+1. Change the central version.
+2. Run `dotnet restore PlaylistGenerator.slnx --force-evaluate`.
+3. Review every changed `packages.lock.json`.
+4. Run the full validation workflow.
+5. Update existing documentation if runtime or build behavior changed.
 
-All active application code lives in `playlist_generator/`. Packaging launcher
-scripts live in `scripts/`. Tests live in `tests/`. Removed PowerShell assets
-are out of scope and should not be reintroduced.
+Do not hand-edit lock files.
 
-## Documentation Rules
+## Documentation Boundaries
 
-- Keep `README.md` focused on what the application does and how to run it.
-- Keep maintainer workflow in this document.
-- Update [AGENTS.md](../AGENTS.md) only when repository-specific automation
-  guidance changes.
-- Cross-reference existing docs instead of copying the same commands into
-  multiple files.
+- Keep user behavior and commands in `README.md`.
+- Keep architecture, dependency, hook, and release workflow here.
+- Keep exact validation commands and test scope in `docs/testing.md`.
+- Cross-reference an existing source section instead of duplicating it.

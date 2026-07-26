@@ -1,145 +1,120 @@
 # VLC Playlist Generator
 
-VLC Playlist Generator is a Python application for building shuffled `.m3u8`
-playlists and inserting a specific audio file after every configured block of
-tracks. It can also normalize the volume of supported audio files in a
-directory. The repository is now Python-only and is intended to run the same way
-on Windows, macOS, and Linux.
+VLC Playlist Generator is a local Avalonia desktop application for creating
+shuffled UTF-8 `.m3u8` playlists and normalizing audio volume. It also includes
+a command-line executable for scripts and automation.
 
 ## Features
 
-- Recursive music library scanning for supported audio formats.
-- Deterministic, testable playlist generation logic in a shared core module.
-- Command-line interface for scripting and automation.
-- Tkinter desktop GUI for local interactive use.
-- Non-destructive volume normalization into a separate output directory.
-- Guided FFmpeg installation command for volume normalization.
-- Windows executable build support through PyInstaller.
-- UTF-8 `.m3u8` output with absolute paths for VLC compatibility.
-- Linting, formatting, tests, and git commit hooks for the Python codebase.
+- Cross-platform Avalonia 12 desktop interface with light and dark themes.
+- Recursive, symlink-safe scanning for supported audio formats.
+- Shuffled playlists with a selected audio file inserted after every complete
+  block of tracks.
+- Non-destructive, resumable normalization to Opus 160k copies through FFmpeg.
+- Pause, resume, immediate stop, progress, and diagnostic details in the GUI.
+- Atomic playlist and normalized-file writes that do not replace good output
+  with a failed partial operation.
+- Self-contained Windows and Linux desktop and CLI builds produced locally on
+  Linux.
+- Platform-neutral core services shared by the GUI and CLI.
 
 ## Requirements
 
-- Python 3.9 or newer.
-- Tkinter for the GUI.
+To build from source:
+
+- .NET SDK 10.0.302 or a newer 10.0 patch.
+- Linux, Windows, or macOS for development.
 - FFmpeg on `PATH` for volume normalization.
 
-Tkinter ships with the standard Python installers on Windows and macOS. On some
-Linux distributions you may need to install it separately, for example
-`python3-tk`.
+Playlist generation does not require FFmpeg. The published builds are
+self-contained and do not require users to install .NET.
 
-Playlist generation does not require FFmpeg. To check for FFmpeg and run a
-guided install command when a supported package manager is available:
+On Debian or Ubuntu, Avalonia desktop applications require:
 
 ```bash
-python3 -m playlist_generator install-ffmpeg
+sudo apt install libx11-6 libice6 libsm6 libfontconfig1
 ```
 
-## Installation
+## Run From Source
 
-Run directly from the repository:
+Start the desktop application:
 
 ```bash
-python3 -m playlist_generator --help
+dotnet run --project src/PlaylistGenerator.Desktop
 ```
 
-Or install the package locally:
+Show CLI help:
 
 ```bash
-python3 -m pip install .
+dotnet run --project src/PlaylistGenerator.Cli -- --help
 ```
 
-That installation exposes:
+## Desktop Usage
 
-- `vlc-playlist-generator`
-- `vlc-playlist-generator-gui`
+The **Create playlist** tab has separate inputs for the music library, special
+audio file, insertion interval, and playlist destination.
 
-To install the development tooling as well:
-
-```bash
-python3 -m pip install -e ".[dev]"
-```
-
-To install the Windows executable build tooling in the active environment:
-
-```bash
-python3 -m pip install -e ".[windows-build]"
-```
+The **Normalize volume** tab creates Opus 160k copies in a separate output
+folder. It preserves relative subfolders and metadata, skips completed outputs,
+and never changes source files. Pause takes effect before the next FFmpeg step;
+Stop cancels an active FFmpeg process and safely removes partial output.
 
 ## CLI Usage
 
+Create a playlist:
+
 ```bash
-python3 -m playlist_generator \
+dotnet run --project src/PlaylistGenerator.Cli -- \
   --source-directory "/path/to/Music" \
   --special-file "/path/to/station-id.mp3" \
   --insert-every 4 \
   --output-path "/path/to/Playlists/mix.m3u8"
 ```
 
-The CLI prints the output path followed by a JSON summary with:
-
-- `source_directory`
-- `special_file`
-- `output_path`
-- `source_track_count`
-- `playlist_entry_count`
-- `insert_every`
-
-Generated playlists store absolute local filesystem paths for VLC
-compatibility. Sharing a playlist can expose your directory structure and may
-not work on another machine.
-
-To normalize supported audio files recursively into a separate directory:
+Normalize a directory:
 
 ```bash
-python3 -m playlist_generator normalize-volume \
+dotnet run --project src/PlaylistGenerator.Cli -- \
+  normalize-volume \
   --source-directory "/path/to/Music" \
   --output-directory "/path/to/Normalized"
 ```
 
-The normalization command preserves relative subfolders under the output
-directory, encodes normalized copies as Opus 160k `.opus` files with two-pass
-FFmpeg loudness normalization, and skips files that would overwrite their source
-path, already live under the output directory, or already have a normalized
-`.opus` output file. Rerunning normalization against the same output directory
-resumes by skipping completed files.
-
-## GUI Usage
-
-Run the Tkinter application:
+Show a platform-appropriate FFmpeg installation command:
 
 ```bash
-python3 -m playlist_generator.gui
+dotnet run --project src/PlaylistGenerator.Cli -- install-ffmpeg
 ```
 
-Or, after installation:
+The command is shown for review and is never run automatically.
+
+## Local Executable Builds
+
+From a Linux machine, publish self-contained Windows `.exe` files and Linux
+executables:
 
 ```bash
-vlc-playlist-generator-gui
+./scripts/build-release.sh
 ```
 
-The GUI opens in dark mode and includes a Light/Dark toggle. Playlist
-generation and volume normalization are shown as separate sections with
-separate source-folder inputs so you can generate a playlist from one folder and
-normalize audio from another. Normalization writes Opus 160k `.opus` copies to
-the selected normalized output folder and leaves the original files in place. It
-shows file progress while running and supports pausing, resuming, or stopping
-between files. The window adapts to compact or scaled displays and scrolls when
-the full form does not fit on screen.
+Output is organized under:
 
-## Windows EXE
+- `artifacts/win-x64/desktop/PlaylistGenerator.exe`
+- `artifacts/win-x64/cli/playlist-generator.exe`
+- `artifacts/linux-x64/desktop/PlaylistGenerator`
+- `artifacts/linux-x64/cli/playlist-generator`
 
-The repository includes a supported PyInstaller build path for producing a
-standalone Windows GUI executable. Maintainer-facing build steps live in
-[docs/maintainer-guide.md](docs/maintainer-guide.md). Validation details for
-the build helper live in [docs/testing.md](docs/testing.md). Tagged builds also
-publish the generated `.exe` files to GitHub Releases.
+Select one or more target architectures when needed:
+
+```bash
+./scripts/build-release.sh --runtime win-arm64
+./scripts/build-release.sh --runtime win-x64 --runtime linux-arm64
+```
+
+Detailed release and validation workflow lives in
+[docs/maintainer-guide.md](docs/maintainer-guide.md).
 
 ## Supported Input Audio Formats
-
-The playlist scanner and normalization source scanner accept these input
-extensions. Normalized output files are always written as Opus 160k `.opus`
-files.
 
 - `.mp3`
 - `.flac`
@@ -150,45 +125,39 @@ files.
 - `.opus`
 - `.wma`
 
+Matching is case-insensitive. Normalized outputs always use `.opus`.
+
 ## Playlist Behavior
 
-Generation follows this sequence:
+Generation:
 
-1. Scan the selected source directory recursively.
-2. Keep only supported audio files.
-3. Remove the special file from the source pool if it lives inside that
-   directory.
-4. Shuffle the remaining tracks.
-5. Insert the special file after every full block of `x` songs.
-6. Write the playlist as UTF-8 `.m3u8` with a `#EXTM3U` header.
+1. Scans the music directory recursively.
+2. Excludes unsupported files and symbolic-link/reparse-point trees.
+3. Removes the special file from the shuffle pool if it is inside the library.
+4. Shuffles the remaining tracks.
+5. Inserts the special file after every complete group of the configured size.
+6. Atomically writes a UTF-8 `.m3u8` file with a `#EXTM3U` header.
 
-Example with `--insert-every 3`:
+With an interval of three, `A, B, C, D` becomes `A, B, C, ID, D`. No special
+file is appended after an incomplete trailing group.
 
-- Shuffled tracks: `A, B, C, D, E, F, G`
-- Special file: `ID`
-- Result: `A, B, C, ID, D, E, F, ID, G`
-
-No extra special file is added after a trailing partial block.
+Generated playlists contain absolute local paths for VLC compatibility. Sharing
+one can expose local directory names and will not generally work on another
+computer.
 
 ## Project Layout
 
-- `playlist_generator/core.py`: shared playlist generation logic.
-- `playlist_generator/audio_normalization.py`: FFmpeg-backed normalization logic.
-- `playlist_generator/ffmpeg_setup.py`: guided FFmpeg install command detection.
-- `playlist_generator/cli.py`: command-line entrypoint.
-- `playlist_generator/gui.py`: Tkinter GUI entrypoint.
-- `playlist_generator/windows_build.py`: Windows executable build helper.
-- `scripts/`: PyInstaller launcher entrypoints for Windows packaging.
-- `tests/`: pytest-discovered automated tests.
-- `docs/`: maintainer-oriented project documentation.
-
-## Documentation
-
-- Maintainer workflow lives in [docs/maintainer-guide.md](docs/maintainer-guide.md).
-- Testing and validation workflow lives in [docs/testing.md](docs/testing.md).
-- Repository instructions for coding agents live in [AGENTS.md](AGENTS.md).
-- Tool configuration remains centralized in [pyproject.toml](pyproject.toml) and
-  [.pre-commit-config.yaml](.pre-commit-config.yaml).
+- `src/PlaylistGenerator.Core/`: domain models and application services.
+- `src/PlaylistGenerator.CommandLine/`: testable CLI parsing and presentation.
+- `src/PlaylistGenerator.Presentation/`: platform-neutral MVVM state and
+  commands.
+- `src/PlaylistGenerator.Desktop/`: Avalonia views, desktop adapters, and GUI
+  host.
+- `src/PlaylistGenerator.Cli/`: thin console executable host.
+- `tests/PlaylistGenerator.Tests/`: xUnit v3 unit and integration tests.
+- `scripts/`: local validation, hook installation, and release publishing.
+- `.githooks/`: repository-owned local Git hooks.
+- `docs/`: maintainer and testing documentation.
 
 ## License
 
