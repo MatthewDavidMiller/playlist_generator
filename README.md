@@ -97,6 +97,10 @@ executables:
 ./scripts/build-release.sh
 ```
 
+After installing the repository hook with `./scripts/install-hooks.sh`, every
+successful commit also refreshes the `win-x64` desktop and CLI binaries
+automatically.
+
 Output is organized under:
 
 - `artifacts/win-x64/desktop/PlaylistGenerator.exe`

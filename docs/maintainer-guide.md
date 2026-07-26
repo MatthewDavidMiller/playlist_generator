@@ -48,10 +48,13 @@ Install the repository-owned pre-commit hook once per clone:
 
 This sets the clone's `core.hooksPath` to `.githooks`. The hook runs
 [`scripts/validate.sh`](../scripts/validate.sh), whose checks are documented in
-[docs/testing.md](testing.md).
+[docs/testing.md](testing.md), and then publishes the `win-x64` desktop and CLI
+applications. A validation or Windows publish failure blocks the commit.
+Successful commits leave the binaries under `artifacts/win-x64`.
 
-There is intentionally no GitHub Actions or remote release workflow. Validation
-and release publishing are local and explicit.
+This hook is the repository's local CI/CD pipeline. There is intentionally no
+GitHub Actions or remote release workflow; other runtime builds and all
+distribution remain explicit local maintainer actions.
 
 ## Local Release Builds
 
@@ -85,6 +88,9 @@ Artifacts go to `artifacts/<runtime>/desktop` and
 anything. Runtime graphs for every supported RID are declared centrally and
 recorded in the committed lock files; publishing uses locked restore mode.
 Distribution is a separate explicit maintainer action.
+
+The application version is set centrally through `VersionPrefix` in
+[Directory.Build.props](../Directory.Build.props).
 
 ## Dependency Updates
 

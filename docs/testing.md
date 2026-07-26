@@ -10,12 +10,13 @@ This is the validation reference for the repository. For user behavior, see
   analyzer, deterministic-build, and lock-file rules.
 - [Directory.Packages.props](../Directory.Packages.props) pins package versions.
 - [global.json](../global.json) selects the .NET 10 SDK.
-- [`scripts/validate.sh`](../scripts/validate.sh) defines the pre-commit
+- [`.githooks/pre-commit`](../.githooks/pre-commit) defines the local CI/CD
   pipeline.
+- [`scripts/validate.sh`](../scripts/validate.sh) defines its validation stage.
 
 ## Validation Commands
 
-Run the same full pipeline as the Git hook:
+Run the validation stage used by the Git hook:
 
 ```bash
 ./scripts/validate.sh
@@ -24,6 +25,7 @@ Run the same full pipeline as the Git hook:
 For isolated diagnostics, run its commands in order:
 
 ```bash
+./scripts/test-pre-commit-hook.sh
 dotnet restore PlaylistGenerator.slnx --locked-mode
 dotnet format PlaylistGenerator.slnx --no-restore --verify-no-changes
 dotnet build PlaylistGenerator.slnx \
@@ -102,6 +104,12 @@ smoke testing still needs a supported Windows system.
 ## Hook Behavior
 
 After `./scripts/install-hooks.sh`, every `git commit` runs the full validation
-script. A format, build, analyzer, lock-file, or test failure blocks the commit.
+script and then `./scripts/build-release.sh --runtime win-x64`. A hook
+regression, format, build, analyzer, lock-file, test, or Windows publish failure
+blocks the commit. A successful commit refreshes:
+
+- `artifacts/win-x64/desktop/PlaylistGenerator.exe`
+- `artifacts/win-x64/cli/playlist-generator.exe`
+
 The repository has no remote CI substitute, so do not bypass the hook without
-running the same script manually.
+running both stages manually.

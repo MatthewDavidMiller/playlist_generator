@@ -2,4 +2,5 @@
 set -euo pipefail
 
 repository_root="$(git rev-parse --show-toplevel)"
-exec "$repository_root/scripts/validate.sh"
+"$repository_root/scripts/validate.sh"
+exec "$repository_root/scripts/build-release.sh" --runtime win-x64

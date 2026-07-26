@@ -11,6 +11,7 @@ fi
 
 cd "$repository_root"
 
+"$repository_root/scripts/test-pre-commit-hook.sh"
 "$dotnet_command" restore PlaylistGenerator.slnx --locked-mode
 "$dotnet_command" format PlaylistGenerator.slnx --no-restore --verify-no-changes
 "$dotnet_command" build PlaylistGenerator.slnx \
