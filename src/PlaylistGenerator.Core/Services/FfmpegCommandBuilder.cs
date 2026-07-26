@@ -2,19 +2,42 @@ using PlaylistGenerator.Core.Models;
 
 namespace PlaylistGenerator.Core.Services;
 
+/// <summary>
+/// Builds FFmpeg argument lists for the two-pass loudness normalization workflow.
+/// </summary>
+/// <remarks>
+/// Arguments are returned as discrete values so that no shell ever parses them.
+/// </remarks>
 public static class FfmpegCommandBuilder
 {
+    /// <summary>EBU R128 target used by both passes.</summary>
     public const string LoudnessTarget = "I=-16:TP=-1.5:LRA=11";
+
+    /// <summary>Filter for the measurement pass, which decodes without writing audio.</summary>
     public const string AnalysisFilter = $"loudnorm={LoudnessTarget}:print_format=json";
 
-    public static IReadOnlyList<string> BuildAnalysis(string inputPath) =>
-        ["-hide_banner", "-nostdin", "-i", inputPath, "-af", AnalysisFilter, "-f", "null", "-"];
+    private const string OpusBitrate = "160k";
 
+    /// <summary>Builds the measurement pass, which discards output and prints JSON.</summary>
+    public static IReadOnlyList<string> BuildAnalysis(string inputPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inputPath);
+        return ["-hide_banner", "-nostdin", "-i", inputPath, "-af", AnalysisFilter, "-f", "null", "-"];
+    }
+
+    /// <summary>
+    /// Builds the encoding pass, applying measurements from
+    /// <paramref name="stats"/> so the correction is linear rather than dynamic.
+    /// </summary>
     public static IReadOnlyList<string> BuildEncode(
         string inputPath,
         string outputPath,
         LoudnessStats stats)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inputPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        ArgumentNullException.ThrowIfNull(stats);
+
         var filter =
             $"loudnorm={LoudnessTarget}"
             + $":measured_I={stats.InputIntegrated}"
@@ -36,7 +59,7 @@ public static class FfmpegCommandBuilder
             "-c:a",
             "libopus",
             "-b:a",
-            "160k",
+            OpusBitrate,
             "-vbr",
             "on",
             "-map_metadata",

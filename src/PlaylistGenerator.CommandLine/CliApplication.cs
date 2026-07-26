@@ -1,38 +1,79 @@
-using System.Globalization;
-using System.Text.Json;
+using PlaylistGenerator.CommandLine.Commands;
+using PlaylistGenerator.CommandLine.Parsing;
 using PlaylistGenerator.Core.Abstractions;
+using PlaylistGenerator.Core.Composition;
 using PlaylistGenerator.Core.Exceptions;
-using PlaylistGenerator.Core.Models;
 
 namespace PlaylistGenerator.CommandLine;
 
+/// <summary>
+/// Dispatches a command line to a command and turns failures into exit codes.
+/// </summary>
+/// <remarks>
+/// Writers are injected rather than using <see cref="Console"/> directly so the whole
+/// surface, including its output, is testable in process.
+/// </remarks>
 public sealed class CliApplication
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
-
-    private readonly IPlaylistGenerator _playlistGenerator;
-    private readonly IAudioNormalizer _audioNormalizer;
-    private readonly IFfmpegInstallAdvisor _ffmpegInstallAdvisor;
+    private readonly IReadOnlyList<ICliCommand> _commands;
+    private readonly ICliCommand _defaultCommand;
     private readonly TextWriter _output;
     private readonly TextWriter _error;
 
+    /// <summary>Builds the standard command set over the given services.</summary>
     public CliApplication(
         IPlaylistGenerator playlistGenerator,
         IAudioNormalizer audioNormalizer,
         IFfmpegInstallAdvisor ffmpegInstallAdvisor,
         TextWriter output,
         TextWriter error)
+        : this(
+            [
+                new GeneratePlaylistCommand(playlistGenerator),
+                new NormalizeVolumeCommand(audioNormalizer),
+                new InstallFfmpegCommand(ffmpegInstallAdvisor),
+            ],
+            output,
+            error)
     {
-        _playlistGenerator = playlistGenerator;
-        _audioNormalizer = audioNormalizer;
-        _ffmpegInstallAdvisor = ffmpegInstallAdvisor;
-        _output = output;
-        _error = error;
     }
 
+    /// <summary>Builds an application over an explicit command set.</summary>
+    /// <exception cref="ArgumentException">No command is marked as the default.</exception>
+    public CliApplication(
+        IReadOnlyList<ICliCommand> commands,
+        TextWriter output,
+        TextWriter error)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(error);
+
+        _commands = commands;
+        _output = output;
+        _error = error;
+        _defaultCommand = commands.SingleOrDefault(command => command.Name is null)
+            ?? throw new ArgumentException(
+                "Exactly one command must be the default, with a null name.",
+                nameof(commands));
+    }
+
+    /// <summary>Builds the standard command set from the shared composition root.</summary>
+    public static CliApplication Create(CoreServices services, TextWriter output, TextWriter error)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        return new CliApplication(
+            services.PlaylistGenerator,
+            services.AudioNormalizer,
+            services.FfmpegInstallAdvisor,
+            output,
+            error);
+    }
+
+    /// <summary>
+    /// Runs the command line and returns the process exit code. This never throws; every
+    /// failure becomes a code from <see cref="ExitCode"/>.
+    /// </summary>
     public async Task<int> RunAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken = default)
@@ -41,200 +82,67 @@ public sealed class CliApplication
 
         try
         {
-            if (arguments.Count == 0 || arguments[0] is "--help" or "-h")
+            if (arguments.Count == 0 || OptionParser.IsHelpRequest(arguments))
             {
-                await _output.WriteLineAsync(Usage).ConfigureAwait(false);
-                return 0;
+                await _output.WriteLineAsync(BuildUsage()).ConfigureAwait(false);
+                return ExitCode.Success;
             }
 
-            return arguments[0] switch
+            var command = _commands.FirstOrDefault(
+                candidate => string.Equals(candidate.Name, arguments[0], StringComparison.Ordinal));
+
+            // An unrecognized first argument belongs to the default command, so
+            // "--source-directory ..." keeps working without a command name.
+            var commandArguments = command is null
+                ? arguments
+                : arguments.Skip(1).ToArray();
+            command ??= _defaultCommand;
+
+            if (OptionParser.IsHelpRequest(commandArguments))
             {
-                "normalize-volume" => await NormalizeAsync(
-                        arguments.Skip(1).ToArray(),
-                        cancellationToken)
-                    .ConfigureAwait(false),
-                "install-ffmpeg" => await ShowFfmpegInstallPlanAsync(
-                        arguments.Skip(1).ToArray())
-                    .ConfigureAwait(false),
-                _ => await GeneratePlaylistAsync(arguments.ToArray()).ConfigureAwait(false),
-            };
+                await _output.WriteLineAsync($"Usage:{Environment.NewLine}{command.Usage}")
+                    .ConfigureAwait(false);
+                return ExitCode.Success;
+            }
+
+            return await command
+                .ExecuteAsync(commandArguments, _output, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (CliUsageException exception)
         {
             await _error.WriteLineAsync($"Error: {exception.Message}").ConfigureAwait(false);
-            await _error.WriteLineAsync(Usage).ConfigureAwait(false);
-            return 2;
+            await _error.WriteLineAsync(BuildUsage()).ConfigureAwait(false);
+            return ExitCode.UsageError;
         }
         catch (PlaylistGeneratorException exception)
         {
+            // An expected failure gets a plain message; a stack trace would only be noise.
             await _error.WriteLineAsync(exception.Message).ConfigureAwait(false);
-            return 1;
+            return ExitCode.Failure;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             await _error.WriteLineAsync("Operation canceled.").ConfigureAwait(false);
-            return 130;
+            return ExitCode.Canceled;
+        }
+        catch (Exception exception)
+        {
+            // An unexpected fault still needs a clean exit code, and its detail is worth
+            // keeping because it indicates a defect rather than bad input.
+            await _error.WriteLineAsync($"Unexpected error: {exception}").ConfigureAwait(false);
+            return ExitCode.InternalError;
         }
     }
 
-    private async Task<int> GeneratePlaylistAsync(string[] arguments)
+    private string BuildUsage()
     {
-        var options = ParseOptions(
-            arguments,
-            "--source-directory",
-            "--special-file",
-            "--insert-every",
-            "--output-path");
-        var insertEveryText = Required(options, "--insert-every");
+        var sections = _commands.Select(command => command.Usage);
+        return $"""
+            Usage:
+            {string.Join($"{Environment.NewLine}{Environment.NewLine}", sections)}
 
-        if (!int.TryParse(
-                insertEveryText,
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture,
-                out var insertEvery))
-        {
-            throw new CliUsageException("--insert-every must be an integer.");
-        }
-
-        var result = _playlistGenerator.Generate(
-            new PlaylistRequest(
-                Required(options, "--source-directory"),
-                Required(options, "--special-file"),
-                insertEvery,
-                Required(options, "--output-path")));
-
-        await _output
-            .WriteLineAsync($"Playlist written to {result.OutputPath}")
-            .ConfigureAwait(false);
-        await _output
-            .WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions))
-            .ConfigureAwait(false);
-        return 0;
-    }
-
-    private async Task<int> NormalizeAsync(
-        string[] arguments,
-        CancellationToken cancellationToken)
-    {
-        var options = ParseOptions(
-            arguments,
-            "--source-directory",
-            "--output-directory");
-        var result = await _audioNormalizer
-            .NormalizeAsync(
-                new NormalizationRequest(
-                    Required(options, "--source-directory"),
-                    Required(options, "--output-directory")),
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        await _output
-            .WriteLineAsync($"Normalized audio written to {result.OutputDirectory}")
-            .ConfigureAwait(false);
-        await _output
-            .WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions))
-            .ConfigureAwait(false);
-        return result.Stopped && cancellationToken.IsCancellationRequested ? 130 : 0;
-    }
-
-    private async Task<int> ShowFfmpegInstallPlanAsync(string[] arguments)
-    {
-        if (arguments.Length > 0)
-        {
-            if (arguments.Length == 1 && arguments[0] is "--help" or "-h")
-            {
-                await _output
-                    .WriteLineAsync(
-                        "Usage: playlist-generator install-ffmpeg\n"
-                        + "Shows a safe, platform-appropriate installation command.")
-                    .ConfigureAwait(false);
-                return 0;
-            }
-
-            throw new CliUsageException("install-ffmpeg does not accept options.");
-        }
-
-        var plan = _ffmpegInstallAdvisor.GetPlan();
-        await _output.WriteLineAsync(plan.Message).ConfigureAwait(false);
-        if (plan.Command.Count > 0)
-        {
-            await _output
-                .WriteLineAsync($"Command: {FormatCommand(plan.Command)}")
-                .ConfigureAwait(false);
-        }
-
-        return plan.IsInstalled ? 0 : 1;
-    }
-
-    private static Dictionary<string, string> ParseOptions(
-        string[] arguments,
-        params string[] allowedOptions)
-    {
-        var allowed = allowedOptions.ToHashSet(StringComparer.Ordinal);
-        var parsed = new Dictionary<string, string>(StringComparer.Ordinal);
-
-        for (var index = 0; index < arguments.Length; index += 2)
-        {
-            var option = arguments[index];
-            if (option is "--help" or "-h")
-            {
-                throw new CliUsageException("Place --help before the command for full usage.");
-            }
-
-            if (!allowed.Contains(option))
-            {
-                throw new CliUsageException($"Unknown option '{option}'.");
-            }
-
-            if (index + 1 >= arguments.Length)
-            {
-                throw new CliUsageException($"Option '{option}' requires a value.");
-            }
-
-            if (!parsed.TryAdd(option, arguments[index + 1]))
-            {
-                throw new CliUsageException($"Option '{option}' was provided more than once.");
-            }
-        }
-
-        return parsed;
-    }
-
-    private static string Required(Dictionary<string, string> options, string option)
-    {
-        if (!options.TryGetValue(option, out var value) || string.IsNullOrWhiteSpace(value))
-        {
-            throw new CliUsageException($"Option '{option}' is required.");
-        }
-
-        return value;
-    }
-
-    private static string FormatCommand(IEnumerable<string> command) =>
-        string.Join(
-            ' ',
-            command.Select(
-                argument => argument.Any(char.IsWhiteSpace)
-                    ? $"\"{argument.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
-                    : argument));
-
-    private const string Usage =
-        """
-        Usage:
-          playlist-generator --source-directory <folder> --special-file <file>
-            --insert-every <count> --output-path <playlist.m3u8>
-
-          playlist-generator normalize-volume --source-directory <folder>
-            --output-directory <folder>
-
-          playlist-generator install-ffmpeg
-        """;
-
-    private sealed class CliUsageException : Exception
-    {
-        public CliUsageException(string message)
-            : base(message)
-        {
-        }
+            Run "playlist-generator <command> --help" for one command's usage.
+            """;
     }
 }

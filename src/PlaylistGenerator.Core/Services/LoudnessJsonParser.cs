@@ -4,17 +4,16 @@ using PlaylistGenerator.Core.Models;
 
 namespace PlaylistGenerator.Core.Services;
 
+/// <summary>
+/// Extracts loudness measurements from FFmpeg's <c>loudnorm</c> analysis output.
+/// </summary>
+/// <remarks>
+/// FFmpeg prints the JSON summary among ordinary log lines, so the parser scans backwards
+/// for the last well-formed object rather than assuming the whole stream is JSON.
+/// </remarks>
 public static class LoudnessJsonParser
 {
-    private static readonly string[] RequiredProperties =
-    [
-        "input_i",
-        "input_tp",
-        "input_lra",
-        "input_thresh",
-        "target_offset",
-    ];
-
+    /// <exception cref="PlaylistIOException">No usable analysis object was present.</exception>
     public static LoudnessStats Parse(string output, string sourcePath)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -37,20 +36,22 @@ public static class LoudnessJsonParser
                     output.AsMemory(objectStart, objectEnd - objectStart + 1));
                 var root = document.RootElement;
 
-                var values = RequiredProperties.ToDictionary(
-                    property => property,
-                    property => ReadRequiredValue(root, property, sourcePath),
-                    StringComparer.Ordinal);
-
+                // Argument evaluation is left to right, so the first missing field is the
+                // one reported.
                 return new LoudnessStats(
-                    values["input_i"],
-                    values["input_tp"],
-                    values["input_lra"],
-                    values["input_thresh"],
-                    values["target_offset"]);
+                    ReadRequiredValue(root, "input_i", sourcePath),
+                    ReadRequiredValue(root, "input_tp", sourcePath),
+                    ReadRequiredValue(root, "input_lra", sourcePath),
+                    ReadRequiredValue(root, "input_thresh", sourcePath),
+                    ReadRequiredValue(root, "target_offset", sourcePath));
             }
             catch (JsonException)
             {
+                if (objectEnd == 0)
+                {
+                    break;
+                }
+
                 objectEnd = output.LastIndexOf('}', objectEnd - 1);
             }
         }
@@ -65,12 +66,14 @@ public static class LoudnessJsonParser
         string propertyName,
         string sourcePath)
     {
-        if (!root.TryGetProperty(propertyName, out var value))
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(propertyName, out var value))
         {
             throw new PlaylistIOException(
                 $"FFmpeg loudness analysis for '{sourcePath}' is missing '{propertyName}'.");
         }
 
+        // FFmpeg has emitted these as quoted strings and as bare numbers across versions.
         var text = value.ValueKind switch
         {
             JsonValueKind.String => value.GetString(),

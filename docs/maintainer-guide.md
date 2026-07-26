@@ -20,9 +20,9 @@ an in-process fake and do not execute FFmpeg.
 Dependencies point inward:
 
 ```text
-Avalonia desktop ─┐
-                  ├──> Core models, contracts, and services
-CLI ──────────────┘
+Avalonia desktop ──> Presentation ─┐
+                                   ├──> Core models, contracts, and services
+CLI host ──────────> CommandLine ──┘
 ```
 
 - `PlaylistGenerator.Core` owns scanning, playlist composition, atomic writes,
@@ -30,13 +30,57 @@ CLI ──────────────┘
 - `PlaylistGenerator.Presentation` owns the platform-neutral MVVM state and
   commands.
 - `PlaylistGenerator.Desktop` contains AXAML views, file-picker and theme
-  adapters, composition, and the GUI entry point.
+  adapters, and the GUI entry point.
 - `PlaylistGenerator.CommandLine` owns testable command parsing and
   console/JSON presentation.
 - `PlaylistGenerator.Cli` is the thin console executable host.
 
 Keep operating-system APIs and Avalonia types out of the core project. Add
 domain behavior tests before adding view-specific code.
+
+### Core Layering
+
+Within `PlaylistGenerator.Core`, dependencies also point one way:
+
+```text
+Composition ──> Services ──> Infrastructure ──> Abstractions, Models
+                                Threading ──────────┘
+```
+
+`Abstractions` must not reference `Services`. A contract needing a
+collaborator, such as the pause signal an `IAudioNormalizer` observes, declares
+its own interface there; the concrete `PauseController` lives in `Threading`
+and implements it.
+
+Each public type gets its own file, named after it.
+
+### Composition
+
+`Core/Composition/CoreServices` is the single composition root. Both
+`App.axaml.cs` and `Program.cs` build their object graph from it, so the two
+front ends cannot drift apart. Wiring is explicit and typed rather than
+resolved from a container, which keeps a missing dependency a compile error
+instead of a startup crash. `CoreServices.Create` accepts substituted
+infrastructure for tests.
+
+### Presentation
+
+`MainViewModel` is a shell. It owns the shared `StatusViewModel` and
+`OperationCoordinator`, and composes one view model per tab. Cross-tab
+behavior, such as the normalization tab inheriting defaults from a chosen music
+folder, is wired through an event in the shell rather than by one tab reaching
+into another.
+
+AXAML binds through full paths from the window's `x:DataType`, for example
+`{Binding Playlist.SourceDirectory}`, so every path is verified by the compiled
+bindings at build time.
+
+### Adding a CLI Command
+
+Implement `ICliCommand` in `CommandLine/Commands/`, giving it a `Name`, its own
+`Usage` text, and its own option parsing through `OptionParser`. Register it in
+the `CliApplication` constructor. Exactly one command has a `null` name and
+handles a command line with no command word. Exit codes come from `ExitCode`.
 
 ## Local Git Hook
 

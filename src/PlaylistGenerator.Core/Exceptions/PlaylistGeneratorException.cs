@@ -1,5 +1,8 @@
 namespace PlaylistGenerator.Core.Exceptions;
 
+/// <summary>
+/// Base type for every failure this application reports to a user without a stack trace.
+/// </summary>
 public abstract class PlaylistGeneratorException : Exception
 {
     protected PlaylistGeneratorException(string message)
@@ -8,27 +11,6 @@ public abstract class PlaylistGeneratorException : Exception
     }
 
     protected PlaylistGeneratorException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
-}
-
-public sealed class PlaylistValidationException : PlaylistGeneratorException
-{
-    public PlaylistValidationException(string message)
-        : base(message)
-    {
-    }
-}
-
-public sealed class PlaylistIOException : PlaylistGeneratorException
-{
-    public PlaylistIOException(string message)
-        : base(message)
-    {
-    }
-
-    public PlaylistIOException(string message, Exception innerException)
         : base(message, innerException)
     {
     }

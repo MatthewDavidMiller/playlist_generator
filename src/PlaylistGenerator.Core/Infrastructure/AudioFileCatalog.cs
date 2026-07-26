@@ -1,32 +1,28 @@
-using System.Collections.Frozen;
 using PlaylistGenerator.Core.Abstractions;
 using PlaylistGenerator.Core.Exceptions;
+using PlaylistGenerator.Core.Models;
 
 namespace PlaylistGenerator.Core.Infrastructure;
 
+/// <summary>
+/// Scans a directory tree for supported audio files.
+/// </summary>
 public sealed class AudioFileCatalog : IAudioFileCatalog
 {
-    public static readonly FrozenSet<string> SupportedExtensions =
-        new[]
-        {
-            ".mp3",
-            ".flac",
-            ".wav",
-            ".m4a",
-            ".aac",
-            ".ogg",
-            ".opus",
-            ".wma",
-        }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
-
     private static readonly EnumerationOptions ScanOptions = new()
     {
         RecurseSubdirectories = true,
         ReturnSpecialDirectories = false,
         IgnoreInaccessible = false,
+
+        // Skipping reparse points keeps a symbolic-link cycle from making the scan
+        // unbounded, and keeps linked trees from silently joining the library.
         AttributesToSkip = FileAttributes.ReparsePoint,
     };
 
+    /// <inheritdoc />
+    /// <exception cref="PlaylistValidationException">The directory is missing or unnamed.</exception>
+    /// <exception cref="PlaylistIOException">The tree could not be read.</exception>
     public IReadOnlyList<string> Scan(string sourceDirectory)
     {
         if (string.IsNullOrWhiteSpace(sourceDirectory))
@@ -43,12 +39,20 @@ public sealed class AudioFileCatalog : IAudioFileCatalog
 
         try
         {
-            return Directory
-                .EnumerateFiles(sourcePath, "*", ScanOptions)
-                .Where(IsSupported)
-                .Select(Path.GetFullPath)
-                .Order(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            var files = new List<string>();
+            foreach (var path in Directory.EnumerateFiles(sourcePath, "*", ScanOptions))
+            {
+                // Enumerating from an absolute, normalized root yields absolute, normalized
+                // results, so no per-file re-normalization is needed here.
+                if (AudioFormats.IsSupported(path.AsSpan()))
+                {
+                    files.Add(path);
+                }
+            }
+
+            var ordered = files.ToArray();
+            Array.Sort(ordered, StringComparer.OrdinalIgnoreCase);
+            return ordered;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -57,7 +61,4 @@ public sealed class AudioFileCatalog : IAudioFileCatalog
                 exception);
         }
     }
-
-    public static bool IsSupported(string path) =>
-        SupportedExtensions.Contains(Path.GetExtension(path));
 }

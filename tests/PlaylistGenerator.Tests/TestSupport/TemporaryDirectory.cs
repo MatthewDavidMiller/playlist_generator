@@ -1,5 +1,8 @@
 namespace PlaylistGenerator.Tests.TestSupport;
 
+/// <summary>
+/// A scratch directory removed when the test finishes.
+/// </summary>
 public sealed class TemporaryDirectory : IDisposable
 {
     public TemporaryDirectory()
@@ -10,6 +13,7 @@ public sealed class TemporaryDirectory : IDisposable
         Directory.CreateDirectory(Path);
     }
 
+    /// <summary>The absolute root of this scratch directory.</summary>
     public string Path { get; }
 
     public string CreateDirectory(string relativePath)
@@ -27,7 +31,31 @@ public sealed class TemporaryDirectory : IDisposable
         return path;
     }
 
-    public string GetPath(string relativePath) => System.IO.Path.Combine(Path, relativePath);
+    /// <summary>Creates a file the operating system will treat as runnable.</summary>
+    public string CreateExecutable(string relativePath)
+    {
+        var path = CreateFile(relativePath);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                path,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return path;
+    }
+
+    /// <summary>Returns the absolute path for a path relative to this directory.</summary>
+    public string GetPath(string relativePath) =>
+        System.IO.Path.Combine(Path, relativePath);
+
+    /// <summary>Returns every file under this directory, relative to its root.</summary>
+    public IReadOnlyList<string> EnumerateRelativeFiles() =>
+        Directory
+            .EnumerateFiles(Path, "*", SearchOption.AllDirectories)
+            .Select(file => System.IO.Path.GetRelativePath(Path, file))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
 
     public void Dispose()
     {
@@ -35,11 +63,9 @@ public sealed class TemporaryDirectory : IDisposable
         {
             Directory.Delete(Path, recursive: true);
         }
-        catch (IOException)
-        {
-            // A failed test should not be hidden by best-effort cleanup.
-        }
-        catch (UnauthorizedAccessException)
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException
+                or DirectoryNotFoundException)
         {
             // A failed test should not be hidden by best-effort cleanup.
         }

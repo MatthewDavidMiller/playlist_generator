@@ -6,8 +6,13 @@ using PlaylistGenerator.Core.Models;
 
 namespace PlaylistGenerator.Core.Infrastructure;
 
+/// <summary>
+/// Runs external processes with arguments passed as discrete values.
+/// </summary>
 public sealed class ProcessRunner : IProcessRunner
 {
+    /// <inheritdoc />
+    /// <exception cref="PlaylistIOException">The process could not be started or run.</exception>
     public async Task<ProcessResult> RunAsync(
         string executable,
         IReadOnlyList<string> arguments,
@@ -15,10 +20,14 @@ public sealed class ProcessRunner : IProcessRunner
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executable);
         ArgumentNullException.ThrowIfNull(arguments);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var startInfo = new ProcessStartInfo
         {
             FileName = executable,
+
+            // Bypassing the shell means no argument string is ever parsed, so paths
+            // containing spaces or quotes cannot change the command's meaning.
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -39,6 +48,8 @@ public sealed class ProcessRunner : IProcessRunner
                 throw new PlaylistIOException($"Unable to start '{executable}'.");
             }
 
+            // Both streams must be drained concurrently with the wait, or a process that
+            // fills a pipe buffer would block forever.
             var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
 
@@ -54,6 +65,11 @@ public sealed class ProcessRunner : IProcessRunner
             {
                 TryKill(process);
                 await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+
+                // The reader tasks fault when the token trips. Observing them keeps the
+                // failures from surfacing later as unobserved task exceptions.
+                await ObserveAsync(standardOutput).ConfigureAwait(false);
+                await ObserveAsync(standardError).ConfigureAwait(false);
                 throw;
             }
         }
@@ -62,6 +78,19 @@ public sealed class ProcessRunner : IProcessRunner
             throw new PlaylistIOException(
                 $"Unable to run '{executable}': {exception.Message}",
                 exception);
+        }
+    }
+
+    private static async Task ObserveAsync(Task<string> readTask)
+    {
+        try
+        {
+            await readTask.ConfigureAwait(false);
+        }
+        catch (Exception exception) when (
+            exception is OperationCanceledException or IOException or ObjectDisposedException)
+        {
+            // Cancellation is the reported outcome; a truncated stream adds nothing.
         }
     }
 

@@ -1,15 +1,18 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
-using PlaylistGenerator.Core.Infrastructure;
+using PlaylistGenerator.Core.Models;
 using PlaylistGenerator.Presentation.Services;
 
 namespace PlaylistGenerator.Desktop.Services;
 
+/// <summary>
+/// Avalonia-backed file and folder pickers.
+/// </summary>
 public sealed class AvaloniaFilePickerService : IFilePickerService
 {
     private static readonly FilePickerFileType AudioFiles = new("Supported audio")
     {
-        Patterns = AudioFileCatalog.SupportedExtensions
+        Patterns = AudioFormats.SupportedExtensions
             .Select(extension => $"*{extension}")
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray(),

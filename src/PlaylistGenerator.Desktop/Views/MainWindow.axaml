@@ -15,6 +15,10 @@
     d:DesignHeight="760"
     mc:Ignorable="d">
 
+  <!--
+    Bindings use full paths from the window's view model rather than nested DataContext
+    assignments, so every path is checked against the single x:DataType above at build time.
+  -->
   <Grid Margin="24" RowDefinitions="Auto,*,Auto" RowSpacing="18">
     <Grid ColumnDefinitions="*,Auto">
       <StackPanel Spacing="3">
@@ -43,10 +47,10 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox
                     PlaceholderText="/path/to/music"
-                    Text="{Binding PlaylistSourceDirectory}" />
+                    Text="{Binding Playlist.SourceDirectory}" />
                 <Button
                     Grid.Column="1"
-                    Command="{Binding BrowsePlaylistSourceCommand}"
+                    Command="{Binding Playlist.BrowseSourceCommand}"
                     Content="Browse…" />
               </Grid>
 
@@ -54,10 +58,10 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox
                     PlaceholderText="/path/to/station-id.mp3"
-                    Text="{Binding SpecialFile}" />
+                    Text="{Binding Playlist.SpecialFile}" />
                 <Button
                     Grid.Column="1"
-                    Command="{Binding BrowseSpecialFileCommand}"
+                    Command="{Binding Playlist.BrowseSpecialFileCommand}"
                     Content="Browse…" />
               </Grid>
 
@@ -68,23 +72,23 @@
                   Minimum="1"
                   Maximum="100000"
                   Increment="1"
-                  Value="{Binding InsertEvery}" />
+                  Value="{Binding Playlist.InsertEvery}" />
 
               <TextBlock Classes="field-label" Text="Playlist output" />
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox
                     PlaceholderText="/path/to/playlist.m3u8"
-                    Text="{Binding OutputPath}" />
+                    Text="{Binding Playlist.OutputPath}" />
                 <Button
                     Grid.Column="1"
-                    Command="{Binding BrowsePlaylistOutputCommand}"
+                    Command="{Binding Playlist.BrowseOutputCommand}"
                     Content="Browse…" />
               </Grid>
 
               <Button
                   Classes="primary"
                   Margin="0,16,0,0"
-                  Command="{Binding GeneratePlaylistCommand}"
+                  Command="{Binding Playlist.GenerateCommand}"
                   Content="Create playlist" />
             </StackPanel>
           </Border>
@@ -105,10 +109,10 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox
                     PlaceholderText="/path/to/audio"
-                    Text="{Binding NormalizationSourceDirectory}" />
+                    Text="{Binding Normalization.SourceDirectory}" />
                 <Button
                     Grid.Column="1"
-                    Command="{Binding BrowseNormalizationSourceCommand}"
+                    Command="{Binding Normalization.BrowseSourceCommand}"
                     Content="Browse…" />
               </Grid>
 
@@ -116,36 +120,40 @@
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox
                     PlaceholderText="/path/to/audio-normalized"
-                    Text="{Binding NormalizedOutputDirectory}" />
+                    Text="{Binding Normalization.OutputDirectory}" />
                 <Button
                     Grid.Column="1"
-                    Command="{Binding BrowseNormalizedOutputCommand}"
+                    Command="{Binding Normalization.BrowseOutputCommand}"
                     Content="Browse…" />
               </Grid>
 
               <ProgressBar
                   Margin="0,16,0,0"
                   Minimum="0"
-                  Maximum="{Binding ProgressMaximum}"
-                  Value="{Binding ProgressValue}" />
-              <TextBlock Margin="0,4,0,0" Opacity="0.72" Text="{Binding ProgressText}" />
+                  Maximum="{Binding Normalization.ProgressMaximum}"
+                  Value="{Binding Normalization.ProgressValue}" />
               <TextBlock
-                  Text="{Binding NormalizedFileCount, StringFormat='Normalized: {0}'}" />
-              <TextBlock Text="{Binding SkippedFileCount, StringFormat='Skipped: {0}'}" />
+                  Margin="0,4,0,0"
+                  Opacity="0.72"
+                  Text="{Binding Normalization.ProgressText}" />
+              <TextBlock
+                  Text="{Binding Normalization.NormalizedFileCount, StringFormat='Normalized: {0}'}" />
+              <TextBlock
+                  Text="{Binding Normalization.SkippedFileCount, StringFormat='Skipped: {0}'}" />
 
               <StackPanel Margin="0,16,0,0" Orientation="Horizontal" Spacing="8">
                 <Button
                     Classes="primary"
-                    Command="{Binding NormalizeVolumeCommand}"
+                    Command="{Binding Normalization.NormalizeCommand}"
                     Content="Normalize volume" />
                 <Button
-                    Command="{Binding PauseNormalizationCommand}"
+                    Command="{Binding Normalization.PauseCommand}"
                     Content="Pause" />
                 <Button
-                    Command="{Binding ResumeNormalizationCommand}"
+                    Command="{Binding Normalization.ResumeCommand}"
                     Content="Resume" />
                 <Button
-                    Command="{Binding StopNormalizationCommand}"
+                    Command="{Binding Normalization.StopCommand}"
                     Content="Stop" />
               </StackPanel>
             </StackPanel>
@@ -156,15 +164,18 @@
 
     <Border Grid.Row="2" Classes="card" Padding="14">
       <StackPanel Spacing="5">
-        <TextBlock FontWeight="SemiBold" Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+        <TextBlock
+            FontWeight="SemiBold"
+            Text="{Binding Status.Message}"
+            TextWrapping="Wrap" />
         <Expander
             Header="Error details"
-            IsVisible="{Binding HasErrorDetails}">
+            IsVisible="{Binding Status.HasErrorDetails}">
           <SelectableTextBlock
               Margin="0,8,0,0"
               FontFamily="monospace"
               FontSize="12"
-              Text="{Binding ErrorDetails}"
+              Text="{Binding Status.ErrorDetails}"
               TextWrapping="Wrap" />
         </Expander>
       </StackPanel>

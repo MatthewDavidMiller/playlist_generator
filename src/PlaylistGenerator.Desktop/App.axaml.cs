@@ -1,8 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using PlaylistGenerator.Core.Infrastructure;
-using PlaylistGenerator.Core.Services;
+using PlaylistGenerator.Core.Composition;
 using PlaylistGenerator.Desktop.Services;
 using PlaylistGenerator.Desktop.Views;
 using PlaylistGenerator.Presentation.ViewModels;
@@ -17,12 +16,14 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var catalog = new AudioFileCatalog();
-            var locator = new ExecutableLocator();
+            var services = CoreServices.CreateDefault();
             var window = new MainWindow();
             var viewModel = new MainViewModel(
-                new PlaylistGeneratorService(catalog, new RandomTrackShuffler()),
-                new AudioNormalizationService(catalog, locator, new ProcessRunner()),
+                services.PlaylistGenerator,
+                services.AudioNormalizer,
+
+                // Resolved lazily so the picker always uses the live window rather than
+                // capturing one that may not have a storage provider yet.
                 new AvaloniaFilePickerService(() => window),
                 new AvaloniaThemeService());
 

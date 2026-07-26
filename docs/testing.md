@@ -56,26 +56,54 @@ dotnet test PlaylistGenerator.slnx \
 
 The report is written below the test project's `TestResults` output.
 
+## Test Layout
+
+`tests/PlaylistGenerator.Tests/` mirrors the source layout:
+
+- `Core/` covers `PlaylistGenerator.Core`, one test class per type.
+- `CommandLine/` covers argument parsing and command dispatch.
+- `Presentation/` covers the view models and path suggestions.
+- `TestSupport/` holds fakes and fixtures, one type per file.
+
+No test requires FFmpeg or a display server. `FakeProcessRunner` stands in for
+FFmpeg, and `FakeExecutableLocator` keeps resolution off the machine's `PATH`.
+
 ## Test Scope
 
 The suite covers:
 
-- Recursive audio discovery, extension handling, ordering, validation, and
-  symbolic-link boundaries.
-- Pure interval-playlist composition, special-file exclusion, UTF-8 output,
-  and preservation of an existing playlist when input disappears.
+- Recursive audio discovery, extension handling, ordering, validation,
+  symbolic-link boundaries, and link cycles.
+- Path normalization: home expansion, relative segments, platform case rules,
+  and containment that does not treat `/musicbox` as a child of `/music`.
+- Pure interval-playlist composition, special-file exclusion, UTF-8 and
+  non-ASCII output, absence of leftover temporary files, and preservation of an
+  existing playlist when input disappears.
 - FFmpeg argument construction without shell parsing.
-- Real process argument boundaries, diagnostics, start failures, process-tree
-  cancellation, executable permissions, and FFmpeg installation advice.
-- Loudness JSON extraction and malformed/missing-field diagnostics.
-- Recursive normalization, relative paths, Opus settings, output-tree skips,
-  resumable existing outputs, parent/child output layouts, destination
-  collisions, progress, pause, cancellation, FFmpeg failures, and missing
-  output after a false-success process result.
-- CLI parsing, JSON contracts, usage errors, expected failures, normalization,
-  and non-executing FFmpeg installation advice.
-- View-model path suggestions, request mapping, status and diagnostic state,
-  theme delegation, and pause/resume/stop coordination.
+- Real process argument boundaries, shell-metacharacter inertness, output
+  larger than a pipe buffer, diagnostics, start failures, process-tree
+  cancellation, and absence of unobserved task exceptions after cancellation.
+- Executable resolution by explicit path and by search path, including
+  precedence, blank entries, and permission checks.
+- Loudness JSON extraction from mixed log output, quoted and bare numeric
+  values, and malformed, missing, and empty-field diagnostics.
+- Normalization planning: relative paths, output-tree skips, resumable existing
+  outputs, parent/child output layouts, and destination collisions.
+- Normalization execution: Opus settings, untouched sources, progress
+  invariants, pause between passes, cancellation while paused, retention of
+  files that already finished, FFmpeg failures, diagnostic truncation, and
+  missing output after a false-success process result.
+- Rejection of an output folder equal to the source folder, which would
+  otherwise silently skip every file.
+- Pause signalling: non-blocking waits, idempotent pause and resume, release of
+  every waiter, and cancellation while paused.
+- CLI parsing, JSON contracts, usage errors, per-command help, exit codes
+  including the internal-error path, and non-executing FFmpeg installation
+  advice.
+- Composition root wiring for both the default and substituted graphs.
+- View-model path suggestions, request mapping, shared status and busy state,
+  progress reset between runs, theme delegation, disposal, and
+  pause/resume/stop coordination.
 - AXAML compiled bindings and platform adapter compatibility through the
   Release solution build.
 

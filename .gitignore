@@ -1,24 +1,15 @@
+# Editor and tooling state
+.agents/
 .codex/
-.coverage
-.coverage.*
 .idea/
 .vs/
 .vscode/
 *.user
 *.suo
+
+# .NET build and test output
 artifacts/
 bin/
 coverage/
 obj/
 TestResults/
-
-# Stale caches from the pre-Avalonia implementation.
-.hypothesis/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-.venv/
-*.egg-info/
-*.py[cod]
-__pycache__/
-htmlcov/

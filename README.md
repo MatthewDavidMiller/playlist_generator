@@ -56,8 +56,12 @@ audio file, insertion interval, and playlist destination.
 
 The **Normalize volume** tab creates Opus 160k copies in a separate output
 folder. It preserves relative subfolders and metadata, skips completed outputs,
-and never changes source files. Pause takes effect before the next FFmpeg step;
-Stop cancels an active FFmpeg process and safely removes partial output.
+and never changes source files. The output folder must differ from the source
+folder. Pause takes effect before the next FFmpeg step; Stop cancels an active
+FFmpeg process and safely removes partial output.
+
+Only one operation runs at a time, so both tabs stay disabled while either is
+working. Status and error detail are shared by both tabs.
 
 ## CLI Usage
 
@@ -87,6 +91,18 @@ dotnet run --project src/PlaylistGenerator.Cli -- install-ffmpeg
 ```
 
 The command is shown for review and is never run automatically.
+
+Show usage for all commands, or for one command:
+
+```bash
+dotnet run --project src/PlaylistGenerator.Cli -- --help
+dotnet run --project src/PlaylistGenerator.Cli -- normalize-volume --help
+```
+
+Exit codes: `0` success, `1` an operation failed, `2` the command line could not
+be interpreted, `70` an unexpected internal error, `130` interrupted. Successful
+playlist and normalization runs also print a snake-case JSON summary for
+scripting.
 
 ## Local Executable Builds
 
@@ -151,14 +167,16 @@ computer.
 
 ## Project Layout
 
-- `src/PlaylistGenerator.Core/`: domain models and application services.
-- `src/PlaylistGenerator.CommandLine/`: testable CLI parsing and presentation.
+- `src/PlaylistGenerator.Core/`: domain models, contracts, and application
+  services, with `Composition/` holding the shared object graph both hosts use.
+- `src/PlaylistGenerator.CommandLine/`: testable CLI parsing and presentation,
+  with one type per command under `Commands/`.
 - `src/PlaylistGenerator.Presentation/`: platform-neutral MVVM state and
-  commands.
+  commands, one view model per tab.
 - `src/PlaylistGenerator.Desktop/`: Avalonia views, desktop adapters, and GUI
   host.
 - `src/PlaylistGenerator.Cli/`: thin console executable host.
-- `tests/PlaylistGenerator.Tests/`: xUnit v3 unit and integration tests.
+- `tests/PlaylistGenerator.Tests/`: xUnit v3 tests, mirroring the source layout.
 - `scripts/`: local validation, hook installation, and release publishing.
 - `.githooks/`: repository-owned local Git hooks.
 - `docs/`: maintainer and testing documentation.
