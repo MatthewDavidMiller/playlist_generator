@@ -105,6 +105,49 @@ AXAML binds through full paths from the window's `x:DataType`, for example
 bindings at build time. `tests/PlaylistGenerator.Tests/Desktop/` then loads the
 window headlessly and checks that those bindings carry real values.
 
+### About Tab
+
+`AboutViewModel` is fixed for the life of a build, so it is plain and immutable
+rather than observable. Its version comes from the assembly's informational
+version, and its licence text and copyright line come from the repository's
+`LICENSE`, embedded into `PlaylistGenerator.Presentation` by an
+`EmbeddedResource` item. Do not restate the licence or the copyright holder in
+code: changing `LICENSE` has to be enough. The project address is the one value
+that exists nowhere else, so it is a constant on that type.
+
+### Responsive Layout
+
+`Presentation/Layout/WindowLayout` owns the breakpoints and the first-run window
+size as plain functions of a width. `LayoutViewModel` turns the width the window
+reports into a `WindowSizeClass` and the booleans the view binds to, and only
+announces the derived properties when the class actually changes, because a drag
+reports every intermediate pixel.
+
+The view declares which elements react by binding a `compact` style class, for
+example `Classes.compact="{Binding Layout.IsCompact}"`, and `Styles/Controls.axaml`
+gives that class the narrow form of the same role. Descendant selectors are
+deliberately not used for this: tab content is hosted inside a template, so a
+selector rooted at the window would not reach it.
+
+`MainWindow.axaml.cs` holds only what markup cannot express: reporting the
+measured width, and shrinking a first-run window that is larger than the work
+area of the display it opened on.
+
+### Desktop Styling
+
+`Desktop/Styles/Palette.axaml` is the only place a colour is chosen. It defines
+one set of brushes per theme variant, and overrides the Fluent keys
+(`SystemAccentColor*`, `ControlCornerRadius`, `ButtonBackground*`) that retint
+and reshape the built-in controls. `Desktop/Styles/Controls.axaml` holds every
+style, keyed on role classes such as `card`, `primary`, and `stat`.
+
+Two rules keep this working. A selector never matches a bare control type such
+as `TextBlock`, because that also matches the text a control template generates
+for its own content and would repaint button and tab labels. A state Fluent
+paints on the templated content presenter, such as a button's pointer-over
+background, has to be restated with a `/template/` selector; setting it on the
+control alone survives only the rest state.
+
 A transport command that can complete the run, such as `Resume` or `Stop`,
 publishes its transient status message *before* releasing or cancelling the
 run. The run's completion message is written from another thread, and acting

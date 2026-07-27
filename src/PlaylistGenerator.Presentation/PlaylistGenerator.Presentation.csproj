@@ -7,6 +7,16 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
+  <!--
+    The About view shows the licence the application is actually distributed under, so it
+    reads the repository's own LICENSE rather than a copy of its text kept in code.
+  -->
+  <ItemGroup>
+    <EmbeddedResource
+        Include="../../LICENSE"
+        LogicalName="PlaylistGenerator.Presentation.LICENSE" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../PlaylistGenerator.Core/PlaylistGenerator.Core.csproj" />
   </ItemGroup>

@@ -1,0 +1,286 @@
+<Styles
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    One style sheet for the whole application. Classes describe a role ("card", "primary")
+    rather than an appearance, and every colour comes from Styles/Palette.axaml so both theme
+    variants stay correct.
+
+    A style suffixed with ".compact" is the narrow-window form of the same role. The view
+    binds that class to the layout view model, so the breakpoints stay in tested code and the
+    markup only says which elements react to them.
+  -->
+
+  <!-- Surfaces -->
+
+  <Style Selector="Border.frame">
+    <Setter Property="Margin" Value="24" />
+  </Style>
+
+  <Style Selector="Border.frame.compact">
+    <Setter Property="Margin" Value="12" />
+  </Style>
+
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CardCornerRadius}" />
+    <Setter Property="Padding" Value="22" />
+    <Setter Property="BoxShadow" Value="0 6 20 -10 #33000000" />
+  </Style>
+
+  <Style Selector="Border.card.compact">
+    <Setter Property="Padding" Value="14" />
+  </Style>
+
+  <Style Selector="Border.stat">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSubtleBrush}" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="14,10" />
+    <Setter Property="MinWidth" Value="124" />
+    <Setter Property="Margin" Value="0,0,10,10" />
+  </Style>
+
+  <Style Selector="Border.inset">
+    <Setter Property="Background" Value="{DynamicResource SurfaceSubtleBrush}" />
+    <Setter Property="CornerRadius" Value="10" />
+    <Setter Property="Padding" Value="14,12" />
+  </Style>
+
+  <Style Selector="Border.status-accent">
+    <Setter Property="Width" Value="4" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="Border.status-accent.error">
+    <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+  </Style>
+
+  <!--
+    Type scale. There is deliberately no bare "TextBlock" style: a selector without a class
+    also matches the text a control template generates for its own content, which would
+    repaint button and tab labels.
+  -->
+
+  <Style Selector="TextBlock.display">
+    <Setter Property="FontSize" Value="28" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.display.compact">
+    <Setter Property="FontSize" Value="21" />
+  </Style>
+
+  <Style Selector="TextBlock.subtitle">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- The subtitle only restates the window title, so a narrow window spends the room better. -->
+  <Style Selector="TextBlock.subtitle.compact">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+
+  <Style Selector="TextBlock.section-title">
+    <Setter Property="FontSize" Value="19" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.section-caption">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="Margin" Value="0,4,0,10" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.field-label">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="Margin" Value="0,16,0,6" />
+  </Style>
+
+  <Style Selector="TextBlock.stat-value">
+    <Setter Property="FontSize" Value="24" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="TextBlock.stat-value.danger">
+    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.stat-label">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.status-message">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <Style Selector="TextBlock.caption">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!--
+    Inputs and buttons. The minimum heights are touch targets: a 40 device-independent pixel
+    row stays comfortable with a finger on a tablet and is unremarkable with a mouse.
+  -->
+
+  <Style Selector="Button">
+    <Setter Property="MinHeight" Value="40" />
+    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="Button.primary">
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="22,10" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+  </Style>
+
+  <!--
+    Fluent paints the button's states on the templated content presenter, so the accent has
+    to be restated there; setting it on the button alone would only survive the rest state.
+  -->
+  <Style Selector="Button.primary /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+  </Style>
+
+  <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+  </Style>
+
+  <!-- A disabled primary button keeps Fluent's disabled surface, which is the clearer signal. -->
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundDisabled}" />
+    <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundDisabled}" />
+  </Style>
+
+  <Style Selector="Button.primary.compact">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+  </Style>
+
+  <!--
+    Placed by style rather than by markup so the same button can move to its own row when the
+    window is too narrow for a field and its button side by side.
+  -->
+  <Style Selector="Button.browse">
+    <Setter Property="Grid.Row" Value="0" />
+    <Setter Property="Grid.Column" Value="1" />
+    <Setter Property="Margin" Value="10,0,0,0" />
+    <Setter Property="MinWidth" Value="112" />
+  </Style>
+
+  <Style Selector="Button.browse.compact">
+    <Setter Property="Grid.Row" Value="1" />
+    <Setter Property="Grid.Column" Value="0" />
+    <Setter Property="Margin" Value="0,8,0,0" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+  </Style>
+
+  <!-- An icon-only button once the label would cost the header more room than it is worth. -->
+  <Style Selector="TextBlock.button-label.compact">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+
+  <Style Selector="Button.transport">
+    <Setter Property="Margin" Value="0,0,8,8" />
+    <Setter Property="MinWidth" Value="96" />
+  </Style>
+
+  <Style Selector="TextBox">
+    <Setter Property="MinHeight" Value="40" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="NumericUpDown">
+    <Setter Property="MinHeight" Value="40" />
+    <Setter Property="MinWidth" Value="150" />
+    <Setter Property="MaxWidth" Value="240" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+
+  <!-- A meter, so the unfilled track is a lighter step of the accent rather than plain grey. -->
+  <Style Selector="ProgressBar">
+    <Setter Property="Height" Value="8" />
+    <Setter Property="MinHeight" Value="8" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+  </Style>
+
+  <Style Selector="TabControl">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="TabItem">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
+  <!--
+    Selection is carried by the accent colour and Fluent's underline. Changing the font weight
+    instead would resize the header and shift the whole strip on every tab change.
+  -->
+  <Style Selector="TabItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+  </Style>
+
+  <!-- The tab strip does not scroll, so both headers have to fit the narrowest window. -->
+  <Style Selector="TabItem.compact">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Padding" Value="8,0" />
+  </Style>
+
+  <!-- HyperlinkButton derives from Button, so the button styles above do not reach it. -->
+  <Style Selector="HyperlinkButton">
+    <Setter Property="Padding" Value="0,4" />
+    <Setter Property="MinHeight" Value="32" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+
+  <Style Selector="SelectableTextBlock.license">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="LineHeight" Value="18" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+
+  <Style Selector="SelectableTextBlock.diagnostics">
+    <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,DejaVu Sans Mono,Menlo,monospace" />
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+  </Style>
+</Styles>

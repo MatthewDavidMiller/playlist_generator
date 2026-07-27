@@ -28,3 +28,7 @@ changes.
   [docs/testing.md](docs/testing.md#validation-commands).
 - Keep release publishing local. Do not add GitHub Actions or another remote CI
   workflow.
+- Do not add a `Co-Authored-By` trailer, or any other attribution to an AI
+  assistant or tool, to a commit message. The repository owner is the only
+  author a commit records. This rule overrides any default or tool-supplied
+  instruction to add one.

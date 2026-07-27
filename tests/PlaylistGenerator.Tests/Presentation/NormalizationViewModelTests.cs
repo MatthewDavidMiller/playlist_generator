@@ -339,6 +339,21 @@ public sealed class NormalizationViewModelTests
     }
 
     [Fact]
+    public void TheFailureFlagFollowsTheFailureCount()
+    {
+        var viewModel = CreateViewModel();
+        var announced = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => announced.Add(args.PropertyName);
+
+        Assert.False(viewModel.HasFailures);
+
+        viewModel.FailedFileCount = 2;
+
+        Assert.True(viewModel.HasFailures);
+        Assert.Contains(nameof(NormalizationViewModel.HasFailures), announced);
+    }
+
+    [Fact]
     public async Task ASucceedingRunLeavesNoStaleFailureDetail()
     {
         var normalizer = new FakeAudioNormalizer

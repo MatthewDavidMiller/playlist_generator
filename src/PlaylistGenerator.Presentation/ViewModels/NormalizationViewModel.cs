@@ -60,6 +60,7 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
     private int _skippedFileCount;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFailures))]
     private int _failedFileCount;
 
     public NormalizationViewModel(
@@ -79,6 +80,12 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
         _coordinator = coordinator;
         _coordinator.PropertyChanged += OnCoordinatorPropertyChanged;
     }
+
+    /// <summary>
+    /// Gets whether the run has files it could not convert, which the view shows on the
+    /// failure count alongside its label rather than by colour alone.
+    /// </summary>
+    public bool HasFailures => FailedFileCount > 0;
 
     private bool CanNormalize => !_coordinator.IsBusy;
 

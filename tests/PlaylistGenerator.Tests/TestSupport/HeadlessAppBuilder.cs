@@ -14,6 +14,18 @@ namespace PlaylistGenerator.Tests.TestSupport;
 /// </remarks>
 public static class HeadlessAppBuilder
 {
+    /// <summary>
+    /// Mirrors <c>Program.BuildAvaloniaApp</c> apart from the platform.
+    /// </summary>
+    /// <remarks>
+    /// The font matters. Without one registered, wrapped text of any length never converges
+    /// on a line break and the layout pass runs forever, so a view holding a paragraph hangs
+    /// the whole suite rather than failing. The application registers Inter, so the tests do
+    /// too, and then measure text the way the shipped application measures it.
+    /// </remarks>
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UseHeadless(new AvaloniaHeadlessPlatformOptions());
+        AppBuilder
+            .Configure<App>()
+            .WithInterFont()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
 }

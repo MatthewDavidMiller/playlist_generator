@@ -27,6 +27,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(themeService);
 
         _themeService = themeService;
+        Layout = new LayoutViewModel();
+        About = new AboutViewModel();
         Status = new StatusViewModel();
         Operations = new OperationCoordinator();
         Playlist = new PlaylistViewModel(playlistGenerator, filePicker, Status, Operations);
@@ -41,6 +43,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Playlist.SourceDirectorySelected += OnPlaylistSourceDirectorySelected;
     }
 
+    /// <summary>The window's size class, which the view binds to as style classes.</summary>
+    public LayoutViewModel Layout { get; }
+
     /// <summary>Shared status line and diagnostics.</summary>
     public StatusViewModel Status { get; }
 
@@ -52,6 +57,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>State and commands for the normalization tab.</summary>
     public NormalizationViewModel Normalization { get; }
+
+    /// <summary>Ownership, licence, and project details for the about tab.</summary>
+    public AboutViewModel About { get; }
 
     /// <summary>Requests cancellation of in-flight work, used when the window closes.</summary>
     public void CancelOperations() => Normalization.CancelActiveRun();

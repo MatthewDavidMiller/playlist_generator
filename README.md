@@ -7,6 +7,11 @@ a command-line executable for scripts and automation.
 ## Features
 
 - Cross-platform Avalonia 12 desktop interface with light and dark themes.
+- Adaptive layout that reflows from a wide desktop window down to a 360-pixel
+  wide split-screen or small-tablet window, with touch-sized controls and a
+  first-run size that fits the display it opens on.
+- An **About** tab carrying the version, copyright holder, project link, and the
+  full licence the build is distributed under.
 - Recursive, symlink-safe scanning for supported audio formats.
 - Shuffled playlists with a selected audio file inserted after every complete
   block of tracks.
@@ -67,8 +72,29 @@ Several files are encoded at once, so progress is reported per file rather than
 in scan order. Files that could not be normalized are counted separately, and
 the reason for each one appears under **Error details**.
 
-Only one operation runs at a time, so both tabs stay disabled while either is
-working. Status and error detail are shared by both tabs.
+The **About** tab shows the version this build came from, the copyright holder,
+a link to the project page at
+<https://github.com/MatthewDavidMiller/playlist_generator>, and the full MIT
+licence text. The licence shown is the repository's own `LICENSE`, embedded at
+build time, so a published binary carries the notice with it.
+
+Only one operation runs at a time, so both playlist and normalization tabs stay
+disabled while either is working. Status and error detail are shared by them.
+
+## Displays And Input
+
+The window adapts to the room it has. Below roughly 720 device-independent
+pixels of width it switches to a single-column form: each **Browse…** button
+moves under the field it belongs to and stretches, the primary action fills the
+width, and the header drops to a title and an icon-only theme button. Content
+stops widening on a very large or high-resolution display so lines stay
+readable.
+
+Controls are sized for a finger as well as a mouse, every panel scrolls rather
+than clipping, and the window can be resized down to 360x420. A window that
+would not fit the display it opens on is shrunk to that display's work area
+instead of opening partly off screen. Scaling on a high-DPI display is handled
+by Avalonia and needs no setting.
 
 ## CLI Usage
 
@@ -181,9 +207,10 @@ computer.
 - `src/PlaylistGenerator.CommandLine/`: testable CLI parsing and presentation,
   with one type per command under `Commands/`.
 - `src/PlaylistGenerator.Presentation/`: platform-neutral MVVM state and
-  commands, one view model per tab.
+  commands, one view model per tab, with `Layout/` holding the responsive
+  breakpoints and window sizing.
 - `src/PlaylistGenerator.Desktop/`: Avalonia views, desktop adapters, and GUI
-  host.
+  host, with `Styles/` holding the theme palette and the application styles.
 - `src/PlaylistGenerator.Cli/`: thin console executable host.
 - `tests/PlaylistGenerator.Tests/`: xUnit v3 tests, mirroring the source layout,
   including headless Avalonia tests that need no display server.

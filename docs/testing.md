@@ -70,6 +70,11 @@ No test requires FFmpeg or a display server. `FakeProcessRunner` stands in for
 FFmpeg, `FakeExecutableLocator` keeps resolution off the machine's `PATH`, and
 `Avalonia.Headless.XUnit` runs the real window without one.
 
+`HeadlessAppBuilder` must register the same font the application does. Without a
+font, wrapped text never settles on a line break and the layout pass runs
+forever, so a view holding a paragraph hangs the run instead of failing it.
+`MainWindowTests.ExpandedErrorDetailLaysOutItsWholeText` is the guard for that.
+
 Tests that observe normalization must synchronize on a reported signal rather
 than a bare `Task.Yield`, because files are processed on thread-pool workers.
 `AudioNormalizationServiceTests.CreateService` runs one file at a time so that
@@ -125,9 +130,21 @@ The suite covers:
 - View-model path suggestions, request mapping, shared status and busy state,
   progress reset between runs, theme delegation, disposal while a run is in
   flight, failure counts and detail, and pause/resume/stop coordination.
+- About content: the licence text carried in the build, the copyright holder
+  quoted from that licence rather than restated, the version reported without
+  build metadata, and the project address.
+- Responsive layout: the width breakpoints including their exact boundaries, an
+  unmeasured width that must not select the compact layout, a first-run size
+  fitted to a short, small, tiny, or unknown work area, and size-class changes
+  announced only when the class really changed.
 - AXAML compiled bindings and platform adapter compatibility through the
   Release solution build, and window construction, live binding values, tab
-  content, and close-cancels-the-run through the headless tests.
+  content, the about tab's owner, licence, and project link, wrapped text that
+  lays out rather than looping, the normalization stat tiles and their failure
+  marking, the width the
+  window reports to the layout, browse buttons that stack under their fields in
+  a narrow window and sit beside them in a wide one, and
+  close-cancels-the-run through the headless tests.
 
 Add regression tests for every defect fixed. Prefer core and view-model tests
 over tests that require a display server.

@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using PlaylistGenerator.Desktop.Views;
+using PlaylistGenerator.Presentation.Layout;
 using PlaylistGenerator.Presentation.ViewModels;
 using PlaylistGenerator.Tests.TestSupport;
 
@@ -11,8 +12,8 @@ using PlaylistGenerator.Tests.TestSupport;
 namespace PlaylistGenerator.Tests.Desktop;
 
 /// <summary>
-/// Covers the window itself: that it builds, that its compiled bindings move real values, and
-/// that closing it unwinds an active run.
+/// Covers the window itself: that it builds, that its compiled bindings move real values, that
+/// it changes shape with its width, and that closing it unwinds an active run.
 /// </summary>
 /// <remarks>
 /// A Release build only proves that binding paths compile. These tests prove the window loads
@@ -21,6 +22,7 @@ namespace PlaylistGenerator.Tests.Desktop;
 public sealed class MainWindowTests
 {
     private const int NormalizationTabIndex = 1;
+    private const int AboutTabIndex = 2;
 
     [AvaloniaFact]
     public void TheWindowBuildsAndKeepsItsViewModel()
@@ -61,6 +63,38 @@ public sealed class MainWindowTests
         Assert.True(expander.IsVisible);
     }
 
+    /// <summary>
+    /// Realizes a paragraph of wrapped text, which the collapsed expander otherwise never
+    /// does.
+    /// </summary>
+    /// <remarks>
+    /// This is the regression test for a headless application that registers no font: text
+    /// wrapping then never settles on a line break and the layout pass runs forever, so the
+    /// symptom is the suite hanging rather than a test failing.
+    /// </remarks>
+    [AvaloniaFact]
+    public void ExpandedErrorDetailLaysOutItsWholeText()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel);
+        var expander = Assert.Single(
+            window.Descendants<Expander>(),
+            candidate => candidate.Header as string == "Error details");
+
+        viewModel.Status.ReportFailure(
+            new InvalidOperationException(
+                string.Join(" ", Enumerable.Repeat("ffmpeg could not read the file", 40))));
+        expander.IsExpanded = true;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var diagnostics = Assert.Single(
+            window.Descendants<SelectableTextBlock>(),
+            block => block.Classes.Contains("diagnostics"));
+        Assert.Equal(viewModel.Status.ErrorDetails, diagnostics.Text);
+        Assert.True(diagnostics.Bounds.Height > 0, "The diagnostics text was never laid out.");
+    }
+
     [AvaloniaFact]
     public void NormalizationCountsAreShown()
     {
@@ -71,10 +105,26 @@ public sealed class MainWindowTests
         viewModel.Normalization.SkippedFileCount = 2;
         viewModel.Normalization.FailedFileCount = 3;
 
-        var texts = window.Descendants<TextBlock>().Select(block => block.Text).ToArray();
-        Assert.Contains("Normalized: 7", texts);
-        Assert.Contains("Skipped: 2", texts);
-        Assert.Contains("Failed: 3", texts);
+        Assert.Equal("7", ReadStatTile(window, "Normalized"));
+        Assert.Equal("2", ReadStatTile(window, "Skipped"));
+        Assert.Equal("3", ReadStatTile(window, "Failed"));
+    }
+
+    /// <summary>
+    /// The failure count is marked so the view can colour it, but it keeps its own label, so
+    /// the state is never carried by colour alone.
+    /// </summary>
+    [AvaloniaFact]
+    public void TheFailureCountIsMarkedOnlyOnceAFileHasFailed()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel, NormalizationTabIndex);
+
+        Assert.DoesNotContain("danger", FindStatValue(window, "Failed").Classes);
+
+        viewModel.Normalization.FailedFileCount = 1;
+
+        Assert.Contains("danger", FindStatValue(window, "Failed").Classes);
     }
 
     [AvaloniaFact]
@@ -91,6 +141,71 @@ public sealed class MainWindowTests
         viewModel.Normalization.IsRunning = true;
 
         Assert.True(stop.IsEffectivelyEnabled);
+    }
+
+    [AvaloniaFact]
+    public void TheAboutTabShowsTheOwnerTheLicenceAndTheProjectLink()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel, AboutTabIndex);
+        var texts = window.Descendants<TextBlock>().Select(block => block.Text).ToArray();
+
+        Assert.Contains(viewModel.About.Copyright, texts);
+        Assert.Contains(viewModel.About.LicenseName, texts);
+
+        var licence = Assert.Single(
+            window.Descendants<SelectableTextBlock>(),
+            block => block.Classes.Contains("license"));
+        Assert.Equal(viewModel.About.LicenseText, licence.Text);
+
+        var link = Assert.Single(window.Descendants<HyperlinkButton>());
+        Assert.Equal(viewModel.About.ProjectUrl, link.NavigateUri);
+    }
+
+    [AvaloniaFact]
+    public void AWideWindowKeepsEachBrowseButtonBesideItsField()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel);
+
+        Resize(window, viewModel, WindowLayout.ExpandedWidth);
+
+        var buttons = BrowseButtons(window);
+        Assert.NotEmpty(buttons);
+        Assert.All(buttons, button => Assert.Equal(0, Grid.GetRow(button)));
+        Assert.All(buttons, button => Assert.Equal(1, Grid.GetColumn(button)));
+    }
+
+    [AvaloniaFact]
+    public void ANarrowWindowStacksEachBrowseButtonUnderItsField()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel);
+
+        Resize(window, viewModel, WindowLayout.CompactWidth - 1);
+
+        var buttons = BrowseButtons(window);
+        Assert.NotEmpty(buttons);
+        Assert.All(buttons, button => Assert.Equal(1, Grid.GetRow(button)));
+        Assert.All(buttons, button => Assert.Equal(0, Grid.GetColumn(button)));
+    }
+
+    /// <summary>
+    /// The window's own width has to reach the view model, or nothing else adapts.
+    /// </summary>
+    [AvaloniaFact]
+    public void TheWindowReportsItsWidthToTheLayout()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel);
+
+        Assert.False(viewModel.Layout.IsCompact);
+
+        window.Width = WindowLayout.MinimumWidth;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        Assert.True(viewModel.Layout.IsCompact);
     }
 
     [AvaloniaFact]
@@ -149,6 +264,34 @@ public sealed class MainWindowTests
         }
 
         return window;
+    }
+
+    /// <summary>
+    /// Reports a width the way a real resize would, then lets the styles that width selects
+    /// take effect.
+    /// </summary>
+    private static void Resize(MainWindow window, MainViewModel viewModel, double width)
+    {
+        viewModel.Layout.Resize(width);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
+
+    private static IReadOnlyList<Button> BrowseButtons(MainWindow window) =>
+        [.. window.Descendants<Button>().Where(button => button.Classes.Contains("browse"))];
+
+    /// <summary>Returns the value shown on the tile carrying the given label.</summary>
+    private static string? ReadStatTile(MainWindow window, string label) =>
+        FindStatValue(window, label).Text;
+
+    private static TextBlock FindStatValue(MainWindow window, string label)
+    {
+        var tile = Assert.Single(
+            window.Descendants<Border>().Where(border => border.Classes.Contains("stat")),
+            candidate => candidate.Descendants<TextBlock>().Any(block => block.Text == label));
+        return Assert.Single(
+            tile.Descendants<TextBlock>(),
+            block => block.Classes.Contains("stat-value"));
     }
 
     private static MainViewModel CreateViewModel(FakeAudioNormalizer? normalizer = null) =>
