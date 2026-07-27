@@ -45,9 +45,10 @@ public sealed class ExecutableLocator : IExecutableLocator
         foreach (var directory in searchPath.Split(Path.PathSeparator))
         {
             // Windows tolerates quoted PATH entries; an empty entry means "current directory",
-            // which is deliberately not searched.
+            // which is deliberately not searched. Anything else malformed is left to
+            // TryResolve, which already treats an unusable candidate as simply not a match.
             var trimmed = directory.Trim().Trim('"');
-            if (trimmed.Length == 0 || trimmed.Contains('\0'))
+            if (trimmed.Length == 0)
             {
                 continue;
             }

@@ -35,6 +35,21 @@ public sealed class MainWindowTests
     }
 
     [AvaloniaFact]
+    public void TheWindowTakesItsSizingRulesFromTheLayout()
+    {
+        using var viewModel = CreateViewModel();
+        var window = Show(viewModel);
+
+        // WindowLayout is the tested owner of these numbers, and FitToScreen compares the
+        // declared size against a value derived from the same constants. Restating them as
+        // markup literals would let the two disagree without anything failing.
+        Assert.Equal(WindowLayout.PreferredWidth, window.Width);
+        Assert.Equal(WindowLayout.PreferredHeight, window.Height);
+        Assert.Equal(WindowLayout.MinimumWidth, window.MinWidth);
+        Assert.Equal(WindowLayout.MinimumHeight, window.MinHeight);
+    }
+
+    [AvaloniaFact]
     public void StatusTextReachesTheWindow()
     {
         using var viewModel = CreateViewModel();

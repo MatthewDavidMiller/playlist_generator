@@ -10,18 +10,37 @@ namespace PlaylistGenerator.Presentation.ViewModels;
 /// time. Holding that state here rather than in either tab keeps both commands disabled
 /// while the other is working.
 /// </remarks>
-public sealed partial class OperationCoordinator : ObservableObject
+public sealed class OperationCoordinator : ObservableObject
 {
-    [ObservableProperty]
-    private bool _isBusy;
+    private int _activeOperationCount;
+
+    /// <summary>Gets whether any operation is currently active.</summary>
+    public bool IsBusy => _activeOperationCount > 0;
 
     /// <summary>
     /// Marks an operation as active until the returned scope is disposed.
     /// </summary>
+    /// <remarks>
+    /// Scopes are counted rather than latched. The commands that open one are disabled while
+    /// this reports busy, so a second scope should not arise; if one ever does, counting keeps
+    /// the first scope's release from re-enabling every command while the second still runs.
+    /// </remarks>
     public IDisposable BeginOperation()
     {
-        IsBusy = true;
+        if (_activeOperationCount++ == 0)
+        {
+            OnPropertyChanged(nameof(IsBusy));
+        }
+
         return new OperationScope(this);
+    }
+
+    private void EndOperation()
+    {
+        if (--_activeOperationCount == 0)
+        {
+            OnPropertyChanged(nameof(IsBusy));
+        }
     }
 
     private sealed class OperationScope(OperationCoordinator coordinator) : IDisposable
@@ -36,7 +55,7 @@ public sealed partial class OperationCoordinator : ObservableObject
             }
 
             _disposed = true;
-            coordinator.IsBusy = false;
+            coordinator.EndOperation();
         }
     }
 }

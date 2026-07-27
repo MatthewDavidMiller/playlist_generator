@@ -167,6 +167,63 @@ public sealed class AudioNormalizationServiceTests
     }
 
     [Fact]
+    public async Task AResumedRunReportsItsSkippedFilesAsOneUpdate()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        var output = temporary.CreateDirectory("normalized");
+        for (var index = 0; index < 25; index++)
+        {
+            temporary.CreateFile($"music/track-{index}.mp3");
+            temporary.CreateFile($"normalized/track-{index}.opus");
+        }
+
+        var events = new List<NormalizationProgress>();
+
+        var result = await CreateService().NormalizeAsync(
+            new NormalizationRequest(source, output),
+            new ImmediateProgress<NormalizationProgress>(events.Add),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // One update, not one per file. A resumed library skips almost everything it finds,
+        // and a report per skip floods the user interface thread before any work starts.
+        var skips = events.Where(progress => progress.Action == NormalizationAction.Skipped);
+        var skip = Assert.Single(skips);
+        Assert.Equal(25, skip.SkippedFileCount);
+        Assert.Equal(25, skip.CompletedFileCount);
+        Assert.Equal(25, result.SkippedFileCount);
+    }
+
+    [Fact]
+    public async Task StoppingDoesNotTurnTheInterruptedFileIntoAFailure()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+        using var cancellation = new CancellationTokenSource();
+
+        // A process torn down mid-run can report a non-zero exit rather than throwing, which
+        // would otherwise be recorded as a broken file and blamed on the library.
+        var runner = new FakeProcessRunner
+        {
+            Handler = (arguments, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(
+                    new ProcessResult(255, string.Empty, "Exiting normally, received signal 2."));
+            },
+        };
+
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: cancellation.Token);
+
+        Assert.True(result.Stopped);
+        Assert.Empty(result.Failures);
+        Assert.Equal(0, result.NormalizedFileCount);
+    }
+
+    [Fact]
     public async Task ProgressCountsNeverExceedTheTotal()
     {
         using var temporary = new TemporaryDirectory();

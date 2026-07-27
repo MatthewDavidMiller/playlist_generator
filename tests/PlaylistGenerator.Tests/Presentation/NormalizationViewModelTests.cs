@@ -115,6 +115,49 @@ public sealed class NormalizationViewModelTests
     }
 
     [Fact]
+    public async Task ProgressTextNamesTheCurrentFileAndStep()
+    {
+        var normalizer = new FakeAudioNormalizer
+        {
+            Handler = (request, progress, _, _) =>
+            {
+                progress!.Report(
+                    new NormalizationProgress(
+                        10,
+                        3,
+                        3,
+                        0,
+                        0,
+                        Path.Combine("music", "album", "song.mp3"),
+                        NormalizationAction.Encoding));
+                return Task.FromResult(
+                    NormalizationResults.Create(
+                        request.SourceDirectory,
+                        request.OutputDirectory));
+            },
+        };
+        var viewModel = CreateViewModel(normalizer);
+        const string expected = "3 / 10 files · song.mp3 · encoding";
+        var seen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(NormalizationViewModel.ProgressText)
+                && viewModel.ProgressText == expected)
+            {
+                seen.TrySetResult();
+            }
+        };
+
+        await viewModel.NormalizeCommand.ExecuteAsync(null);
+
+        // Progress<T> delivers asynchronously, and the run resets the line to idle when it
+        // finishes, so the text is waited for rather than read after the fact. The step is
+        // worded in the view model rather than taken from the enum member's name, and this
+        // is what pins the wording the window actually shows.
+        await seen.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task CountsFromAPreviousRunAreClearedWhenANewOneStarts()
     {
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

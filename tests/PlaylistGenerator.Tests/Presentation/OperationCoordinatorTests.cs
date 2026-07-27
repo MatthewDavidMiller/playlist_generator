@@ -38,6 +38,28 @@ public sealed class OperationCoordinatorTests
     }
 
     [Fact]
+    public void StaysBusyUntilTheLastOverlappingOperationEnds()
+    {
+        var coordinator = new OperationCoordinator();
+        var changes = new List<string?>();
+        var outer = coordinator.BeginOperation();
+        coordinator.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+
+        var inner = coordinator.BeginOperation();
+        inner.Dispose();
+
+        // Releasing one scope must not re-enable the commands that the other still needs
+        // disabled, and it must not announce a change that did not happen.
+        Assert.True(coordinator.IsBusy);
+        Assert.Empty(changes);
+
+        outer.Dispose();
+
+        Assert.False(coordinator.IsBusy);
+        Assert.Equal([nameof(OperationCoordinator.IsBusy)], changes);
+    }
+
+    [Fact]
     public void NotifiesObserversWhenBusyStateChanges()
     {
         var coordinator = new OperationCoordinator();

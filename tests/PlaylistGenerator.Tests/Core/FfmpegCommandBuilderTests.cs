@@ -43,6 +43,20 @@ public sealed class FfmpegCommandBuilderTests
     }
 
     [Fact]
+    public void NeitherPassDecodesEmbeddedCoverArt()
+    {
+        // Most music files carry a cover image as a video stream. FFmpeg would select and
+        // decode it for every track, and the loudness measurement cannot use a picture.
+        Assert.Contains("-vn", FfmpegCommandBuilder.BuildAnalysis("in.mp3"));
+        Assert.Contains(
+            "-vn",
+            FfmpegCommandBuilder.BuildEncode(
+                "in.mp3",
+                "out.opus",
+                new LoudnessStats("-18", "-2", "4", "-29", "0.1")));
+    }
+
+    [Fact]
     public void BothPassesTargetTheSameLoudness()
     {
         var analysis = FfmpegCommandBuilder.BuildAnalysis("in.mp3").ValueAfter("-af");

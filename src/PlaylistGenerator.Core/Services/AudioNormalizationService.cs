@@ -109,10 +109,7 @@ public sealed class AudioNormalizationService : IAudioNormalizer
         var plan = NormalizationPlanner.Create(audioFiles, sourceDirectory, outputDirectory);
         var reporter = new NormalizationProgressReporter(progress, plan.TotalFileCount);
 
-        foreach (var skippedPath in plan.SkippedSourcePaths)
-        {
-            reporter.ReportSkipped(skippedPath);
-        }
+        reporter.ReportSkipped(plan.SkippedSourcePaths);
 
         var stopped = await RunJobsAsync(ffmpeg, plan, pauseSignal, reporter, cancellationToken)
             .ConfigureAwait(false);
@@ -196,6 +193,15 @@ public sealed class AudioNormalizationService : IAudioNormalizer
         }
         catch (PlaylistGeneratorException exception)
         {
+            // A file that broke only because the run was being torn down is a stopped file,
+            // not an unusable one. Recording it as a failure would invent errors on every
+            // stop and leave the summary claiming a library it never actually rejected.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                reporter.Report(job.SourcePath, NormalizationAction.Stopped);
+                throw new OperationCanceledException(exception.Message, exception, cancellationToken);
+            }
+
             reporter.ReportFailed(job.SourcePath, exception.Message);
         }
     }
@@ -244,6 +250,7 @@ public sealed class AudioNormalizationService : IAudioNormalizer
             destinationDirectory,
             $".{Path.GetFileNameWithoutExtension(job.DestinationPath)}.{Guid.NewGuid():N}.tmp"
                 + AudioFormats.NormalizedExtension);
+        var moved = false;
 
         try
         {
@@ -290,6 +297,7 @@ public sealed class AudioNormalizationService : IAudioNormalizer
 
             // Never overwrite: the planner already established that nothing valid is there.
             File.Move(temporaryPath, job.DestinationPath, overwrite: false);
+            moved = true;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException)
@@ -301,7 +309,12 @@ public sealed class AudioNormalizationService : IAudioNormalizer
         }
         finally
         {
-            TryDeleteTemporaryFile(temporaryPath);
+            // After a successful move nothing is left at the temporary path, so the cleanup
+            // syscall is skipped rather than issued once per file in the library.
+            if (!moved)
+            {
+                TryDeleteTemporaryFile(temporaryPath);
+            }
         }
     }
 

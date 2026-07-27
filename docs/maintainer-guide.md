@@ -73,11 +73,19 @@ publishes the matching report under one lock, which costs a little concurrency
 but keeps reported counts monotonic; without it a progress bar runs backwards
 when two workers finish together.
 
+Skipped files are published as one report rather than one per file. The planner
+decides them all together, and a resumed run over a large library skips almost
+everything it finds, so reporting each one separately would post tens of
+thousands of updates to the user interface thread before the first file was
+encoded.
+
 A file that cannot be normalized is recorded in `NormalizationResult.Failures`
 and the run continues. Losing hours of completed work to one unreadable file
 would make a large library impractical to process, and the run is resumable, so
 a later run retries only what is missing. Cancellation still stops the whole
-run.
+run, and a file that broke only because the run was being torn down is reported
+as stopped rather than failed: a torn-down FFmpeg can report a non-zero exit
+instead of throwing, which would otherwise blame the library for the stop.
 
 Anything that observes work started by a worker must synchronize on an actual
 signal. Bodies are dispatched to the thread pool, so a single `Task.Yield` no
@@ -129,9 +137,13 @@ gives that class the narrow form of the same role. Descendant selectors are
 deliberately not used for this: tab content is hosted inside a template, so a
 selector rooted at the window would not reach it.
 
-`MainWindow.axaml.cs` holds only what markup cannot express: reporting the
-measured width, and shrinking a first-run window that is larger than the work
-area of the display it opened on.
+`MainWindow.axaml.cs` holds only what markup cannot express: applying the
+window's declared and minimum size from `WindowLayout`, reporting the measured
+width, and shrinking a first-run window that is larger than the work area of the
+display it opened on. The sizes are applied in code rather than written as AXAML
+literals because `FitToScreen` compares the declared size against a value
+derived from the same constants; a second copy in markup would let the two
+disagree with nothing to catch it.
 
 ### Desktop Styling
 

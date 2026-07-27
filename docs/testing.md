@@ -91,20 +91,25 @@ The suite covers:
 - Pure interval-playlist composition, special-file exclusion, UTF-8 and
   non-ASCII output, absence of leftover temporary files, and preservation of an
   existing playlist when input disappears.
-- FFmpeg argument construction without shell parsing.
+- FFmpeg argument construction without shell parsing, including that neither
+  pass decodes the cover art embedded in most music files.
 - Real process argument boundaries, shell-metacharacter inertness, output
   larger than a pipe buffer, diagnostics, start failures, process-tree
   cancellation, and absence of unobserved task exceptions after cancellation.
 - Executable resolution by explicit path and by search path, including
-  precedence, blank entries, and permission checks.
+  precedence, blank entries, quoted entries, entries that are unusable rather
+  than merely absent, and permission checks.
 - Loudness JSON extraction from mixed log output, quoted and bare numeric
   values, and malformed, missing, and empty-field diagnostics.
 - Normalization planning: relative paths, output-tree skips, resumable existing
   outputs, parent/child output layouts, and destination collisions.
 - Normalization execution: Opus settings, untouched sources, progress
-  invariants, pause between passes, cancellation while paused, retention of
-  files that already finished, FFmpeg failures, diagnostic truncation, and
-  missing output after a false-success process result.
+  invariants, a resumed run that reports its skips as one update rather than one
+  per file, pause between passes, cancellation while paused, retention of
+  files that already finished, a stop that is not recorded as a per-file
+  failure even when the interrupted process reports a non-zero exit, FFmpeg
+  failures, diagnostic truncation, and missing output after a false-success
+  process result.
 - Normalization concurrency: every file converted when several run at once,
   observed overlap bounded by the configured worker count, counts that stay
   self-consistent and never run backwards, rejection of a worker count below
@@ -127,9 +132,11 @@ The suite covers:
 - Unreadable source trees, executable lookups that match nothing, and a
   directory that shares an executable's name.
 - Loudness JSON taken from either FFmpeg output stream.
-- View-model path suggestions, request mapping, shared status and busy state,
-  progress reset between runs, theme delegation, disposal while a run is in
-  flight, failure counts and detail, and pause/resume/stop coordination.
+- View-model path suggestions, request mapping, shared status and busy state
+  that stays busy until the last overlapping operation ends, progress reset
+  between runs, the progress line's wording for the current file and step, theme
+  delegation, disposal while a run is in flight, failure counts and detail, and
+  pause/resume/stop coordination.
 - About content: the licence text carried in the build, the copyright holder
   quoted from that licence rather than restated, the version reported without
   build metadata, and the project address.
@@ -137,8 +144,12 @@ The suite covers:
   unmeasured width that must not select the compact layout, a first-run size
   fitted to a short, small, tiny, or unknown work area, and size-class changes
   announced only when the class really changed.
+- File-picker adapter construction, the folder picker's refusal when no window
+  is ready yet, and pickers the headless platform cannot satisfy.
 - AXAML compiled bindings and platform adapter compatibility through the
-  Release solution build, and window construction, live binding values, tab
+  Release solution build, and window construction, the declared and minimum
+  size taken from `WindowLayout` rather than restated in markup, live binding
+  values, tab
   content, the about tab's owner, licence, and project link, wrapped text that
   lays out rather than looping, the normalization stat tiles and their failure
   marking, the width the

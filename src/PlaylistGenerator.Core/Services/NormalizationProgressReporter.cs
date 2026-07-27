@@ -55,9 +55,25 @@ internal sealed class NormalizationProgressReporter(
         }
     }
 
-    /// <summary>Records a file that needed no work.</summary>
-    public void ReportSkipped(string sourcePath) =>
-        Publish(sourcePath, NormalizationAction.Skipped, skipped: 1);
+    /// <summary>
+    /// Records every file that needed no work, as one report rather than one per file.
+    /// </summary>
+    /// <remarks>
+    /// A resumed run over a large library skips almost everything it finds. Reporting each
+    /// skip separately would post tens of thousands of updates to the user interface thread
+    /// before the first file was encoded, which stalls the window on exactly the runs that
+    /// have the least work to do. The skips are decided together by the planner, so they are
+    /// published together too.
+    /// </remarks>
+    public void ReportSkipped(IReadOnlyList<string> sourcePaths)
+    {
+        ArgumentNullException.ThrowIfNull(sourcePaths);
+
+        if (sourcePaths.Count > 0)
+        {
+            Publish(sourcePaths[^1], NormalizationAction.Skipped, skipped: sourcePaths.Count);
+        }
+    }
 
     /// <summary>Records a file that finished encoding.</summary>
     public void ReportCompleted(string sourcePath) =>

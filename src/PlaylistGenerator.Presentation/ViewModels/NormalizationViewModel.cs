@@ -277,8 +277,28 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
             progress.CompletedFileCount,
             progress.TotalFileCount,
             Path.GetFileName(progress.CurrentSourcePath),
-            progress.Action.ToString().ToLowerInvariant());
+            Describe(progress.Action));
     }
+
+    /// <summary>
+    /// Names a step for the progress line.
+    /// </summary>
+    /// <remarks>
+    /// Spelled out rather than derived from the enum member's name, so the wording shown to a
+    /// user is a deliberate choice here instead of a side effect of how the model happens to
+    /// be spelled, and so a rename in the core cannot silently change the window.
+    /// </remarks>
+    private static string Describe(NormalizationAction action) => action switch
+    {
+        NormalizationAction.Skipped => "skipped",
+        NormalizationAction.Paused => "paused",
+        NormalizationAction.Analyzing => "analyzing",
+        NormalizationAction.Encoding => "encoding",
+        NormalizationAction.Completed => "completed",
+        NormalizationAction.Failed => "failed",
+        NormalizationAction.Stopped => "stopped",
+        _ => string.Empty,
+    };
 
     private void OnCoordinatorPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {

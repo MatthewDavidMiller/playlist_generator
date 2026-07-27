@@ -9,15 +9,24 @@ namespace PlaylistGenerator.Desktop.Views;
 /// The application window.
 /// </summary>
 /// <remarks>
-/// The only logic here is the part that cannot be expressed in markup: reporting the measured
-/// width to the view model, which owns the breakpoints, and fitting the first-run size to the
-/// display it opens on. Everything the window then does about that size is declared in AXAML.
+/// The only logic here is the part that cannot be expressed in markup: taking the window's
+/// sizing rules from <see cref="WindowLayout"/>, reporting the measured width to the view
+/// model, which owns the breakpoints, and fitting the first-run size to the display it opens
+/// on. Everything the window then does about that size is declared in AXAML.
 /// </remarks>
 public partial class MainWindow : Window
 {
     public MainWindow()
     {
         InitializeComponent();
+
+        // Applied here rather than as literals in the markup: WindowLayout is the tested
+        // owner of these numbers, and FitToScreen compares the declared size against a value
+        // derived from the same constants. Two copies would let those two disagree silently.
+        Width = WindowLayout.PreferredWidth;
+        Height = WindowLayout.PreferredHeight;
+        MinWidth = WindowLayout.MinimumWidth;
+        MinHeight = WindowLayout.MinimumHeight;
 
         Closing += (_, _) => ViewModel?.CancelOperations();
 

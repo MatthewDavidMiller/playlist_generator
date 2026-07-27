@@ -95,6 +95,46 @@ public sealed class ExecutableLocatorTests
     }
 
     [Fact]
+    public void AcceptsAQuotedSearchPathEntry()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temporary = new TemporaryDirectory();
+        var directory = temporary.CreateDirectory("bin");
+        var executable = temporary.CreateExecutable("bin/pg-test-tool");
+
+        // Windows tolerates quoted PATH entries, and such a PATH can reach any platform
+        // through a shared profile. The quotes are not part of the directory name.
+        using var searchPath = new EnvironmentVariableScope("PATH", $"\"{directory}\"");
+
+        Assert.Equal(Path.GetFullPath(executable), new ExecutableLocator().Find("pg-test-tool"));
+    }
+
+    [Fact]
+    public void StepsOverAnUnusableSearchPathEntry()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var temporary = new TemporaryDirectory();
+        var directory = temporary.CreateDirectory("bin");
+        var executable = temporary.CreateExecutable("bin/pg-test-tool");
+
+        // A malformed entry is simply not a match. It must not end the search before the
+        // entries after it have been tried.
+        using var searchPath = new EnvironmentVariableScope(
+            "PATH",
+            string.Join(Path.PathSeparator, "relative/not/absolute", "", directory));
+
+        Assert.Equal(Path.GetFullPath(executable), new ExecutableLocator().Find("pg-test-tool"));
+    }
+
+    [Fact]
     public void ReturnsNullWhenTheSearchPathIsUnset()
     {
         using var searchPath = new EnvironmentVariableScope("PATH", null);

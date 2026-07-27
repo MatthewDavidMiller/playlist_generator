@@ -28,6 +28,7 @@ public sealed class AvaloniaFilePickerService : IFilePickerService
 
     public AvaloniaFilePickerService(Func<TopLevel?> topLevelProvider)
     {
+        ArgumentNullException.ThrowIfNull(topLevelProvider);
         _topLevelProvider = topLevelProvider;
     }
 

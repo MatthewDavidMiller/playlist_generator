@@ -19,10 +19,27 @@ public static class FfmpegCommandBuilder
     private const string OpusBitrate = "160k";
 
     /// <summary>Builds the measurement pass, which discards output and prints JSON.</summary>
+    /// <remarks>
+    /// Video is dropped here as well as in the encoding pass. Without it FFmpeg selects the
+    /// cover art embedded in most music files and decodes that image for every track, which
+    /// the loudness measurement cannot use.
+    /// </remarks>
     public static IReadOnlyList<string> BuildAnalysis(string inputPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(inputPath);
-        return ["-hide_banner", "-nostdin", "-i", inputPath, "-af", AnalysisFilter, "-f", "null", "-"];
+        return
+        [
+            "-hide_banner",
+            "-nostdin",
+            "-i",
+            inputPath,
+            "-af",
+            AnalysisFilter,
+            "-vn",
+            "-f",
+            "null",
+            "-",
+        ];
     }
 
     /// <summary>
