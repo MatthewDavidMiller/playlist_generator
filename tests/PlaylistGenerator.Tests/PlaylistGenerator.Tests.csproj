@@ -6,6 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Runs Avalonia views on a headless platform, so the GUI is covered without a display server. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -19,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/PlaylistGenerator.CommandLine/PlaylistGenerator.CommandLine.csproj" />
     <ProjectReference Include="../../src/PlaylistGenerator.Core/PlaylistGenerator.Core.csproj" />
+    <ProjectReference Include="../../src/PlaylistGenerator.Desktop/PlaylistGenerator.Desktop.csproj" />
     <ProjectReference Include="../../src/PlaylistGenerator.Presentation/PlaylistGenerator.Presentation.csproj" />
   </ItemGroup>
 

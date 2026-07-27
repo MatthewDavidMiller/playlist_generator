@@ -9,9 +9,4 @@ public sealed class PlaylistValidationException : PlaylistGeneratorException
         : base(message)
     {
     }
-
-    public PlaylistValidationException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
 }

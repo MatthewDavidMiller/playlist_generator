@@ -106,6 +106,45 @@ public sealed class LoudnessJsonParserTests
     }
 
     [Fact]
-    public void RejectsNullOutput() =>
+    public void PrefersThePrimaryStreamWhenItCarriesTheAnalysis()
+    {
+        var stats = LoudnessJsonParser.Parse(
+            """{"input_i":"-18.42","input_tp":"-2.10","input_lra":"4.70","input_thresh":"-28.54","target_offset":"0.12"}""",
+            """{"input_i":"-99","input_tp":"-99","input_lra":"99","input_thresh":"-99","target_offset":"9"}""",
+            "song.mp3");
+
+        Assert.Equal("-18.42", stats.InputIntegrated);
+    }
+
+    [Fact]
+    public void FallsBackToTheOtherStreamWhenThePrimaryHasNoAnalysis()
+    {
+        // Older FFmpeg builds print the summary to standard output instead.
+        var stats = LoudnessJsonParser.Parse(
+            "frame= 100 fps=0.0 q=-0.0 size=N/A time=00:00:04.00",
+            """{"input_i":"-18.42","input_tp":"-2.10","input_lra":"4.70","input_thresh":"-28.54","target_offset":"0.12"}""",
+            "song.mp3");
+
+        Assert.Equal("-18.42", stats.InputIntegrated);
+    }
+
+    [Fact]
+    public void ReportsWhenNeitherStreamCarriesTheAnalysis()
+    {
+        var exception = Assert.Throws<PlaylistIOException>(
+            () => LoudnessJsonParser.Parse("just logs", "more logs", "song.mp3"));
+
+        Assert.Contains("missing", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("song.mp3", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RejectsNullOutput()
+    {
         Assert.Throws<ArgumentNullException>(() => LoudnessJsonParser.Parse(null!, "song.mp3"));
+        Assert.Throws<ArgumentNullException>(
+            () => LoudnessJsonParser.Parse(null!, "fallback", "song.mp3"));
+        Assert.Throws<ArgumentNullException>(
+            () => LoudnessJsonParser.Parse("primary", null!, "song.mp3"));
+    }
 }

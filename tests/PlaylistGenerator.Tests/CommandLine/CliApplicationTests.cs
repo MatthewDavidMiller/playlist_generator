@@ -1,7 +1,9 @@
 using System.Text.Json;
 using PlaylistGenerator.CommandLine;
 using PlaylistGenerator.CommandLine.Parsing;
+using PlaylistGenerator.Core.Composition;
 using PlaylistGenerator.Core.Exceptions;
+using PlaylistGenerator.Core.Infrastructure;
 using PlaylistGenerator.Core.Models;
 using PlaylistGenerator.Tests.TestSupport;
 
@@ -71,6 +73,64 @@ public sealed class CliApplicationTests
         Assert.Equal(new NormalizationRequest("music", "normalized"), normalizer.Request);
         Assert.Contains("normalized_file_count", output.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ReportsPerFileFailuresAndExitsWithFailure()
+    {
+        var normalizer = new FakeAudioNormalizer
+        {
+            Failures =
+            [
+                new NormalizationFailure("music/broken.mp3", "corrupt header"),
+            ],
+        };
+        var output = new StringWriter();
+        var application = new CliApplication(
+            new FakePlaylistGenerator(),
+            normalizer,
+            FakeFfmpegInstallAdvisor.Installed(),
+            output,
+            new StringWriter());
+
+        var exitCode = await application.RunAsync(
+            NormalizeArguments,
+            TestContext.Current.CancellationToken);
+
+        // A run that skipped past broken files did not fully succeed.
+        Assert.Equal(ExitCode.Failure, exitCode);
+        Assert.Contains("music/broken.mp3", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("corrupt header", output.ToString(), StringComparison.Ordinal);
+
+        var json = JsonDocument.Parse(
+            output.ToString().Split(Environment.NewLine)[^2]);
+        Assert.Equal(1, json.RootElement.GetProperty("failed_file_count").GetInt32());
+        Assert.Equal(
+            "music/broken.mp3",
+            json.RootElement.GetProperty("failures")[0].GetProperty("source_path").GetString());
+    }
+
+    [Fact]
+    public async Task TheCompositionRootBuildsAWorkingApplication()
+    {
+        var output = new StringWriter();
+        var services = CoreServices.Create(
+            new AudioFileCatalog(),
+            new FakeExecutableLocator(),
+            new FakeProcessRunner(),
+            new FixedTrackShuffler());
+
+        var exitCode = await CliApplication
+            .Create(services, output, new StringWriter())
+            .RunAsync(["--help"], TestContext.Current.CancellationToken);
+
+        Assert.Equal(ExitCode.Success, exitCode);
+        Assert.Contains("normalize-volume", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCompositionRootFactoryRejectsNullServices() =>
+        Assert.Throws<ArgumentNullException>(
+            () => CliApplication.Create(null!, new StringWriter(), new StringWriter()));
 
     // Each case is wrapped so the string array is one argument rather than the params list.
     [Theory]
@@ -184,12 +244,10 @@ public sealed class CliApplicationTests
         var normalizer = new FakeAudioNormalizer
         {
             Handler = (request, _, _, _) => Task.FromResult(
-                new NormalizationResult(
+                NormalizationResults.Create(
                     request.SourceDirectory,
                     request.OutputDirectory,
-                    0,
-                    0,
-                    true)),
+                    stopped: true)),
         };
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             TestContext.Current.CancellationToken);

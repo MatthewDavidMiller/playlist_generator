@@ -13,9 +13,4 @@ public sealed class CliUsageException : Exception
         : base(message)
     {
     }
-
-    public CliUsageException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
 }

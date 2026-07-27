@@ -28,6 +28,7 @@ internal static class AtomicFileWriter
         var temporaryPath = Path.Combine(
             directory,
             $".{Path.GetFileName(outputPath)}.{Guid.NewGuid():N}.tmp");
+        var moved = false;
 
         try
         {
@@ -44,6 +45,7 @@ internal static class AtomicFileWriter
             }
 
             File.Move(temporaryPath, outputPath, overwrite: true);
+            moved = true;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException
@@ -55,7 +57,12 @@ internal static class AtomicFileWriter
         }
         finally
         {
-            TryDeleteTemporaryFile(temporaryPath);
+            // After a successful move nothing is left at the temporary path, so the cleanup
+            // syscall is skipped rather than issued for every write.
+            if (!moved)
+            {
+                TryDeleteTemporaryFile(temporaryPath);
+            }
         }
     }
 

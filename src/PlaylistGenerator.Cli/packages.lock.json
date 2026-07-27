@@ -11,7 +11,7 @@
       "playlistgenerator.commandline": {
         "type": "Project",
         "dependencies": {
-          "PlaylistGenerator.Core": "[1.0.0, )"
+          "PlaylistGenerator.Core": "[0.6.0, )"
         }
       },
       "playlistgenerator.core": {

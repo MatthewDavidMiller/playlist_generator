@@ -10,7 +10,10 @@ a command-line executable for scripts and automation.
 - Recursive, symlink-safe scanning for supported audio formats.
 - Shuffled playlists with a selected audio file inserted after every complete
   block of tracks.
-- Non-destructive, resumable normalization to Opus 160k copies through FFmpeg.
+- Non-destructive, resumable normalization to Opus 160k copies through FFmpeg,
+  encoding several files at once across the available processor cores.
+- A file FFmpeg cannot handle is reported and skipped without discarding the rest
+  of the run.
 - Pause, resume, immediate stop, progress, and diagnostic details in the GUI.
 - Atomic playlist and normalized-file writes that do not replace good output
   with a failed partial operation.
@@ -57,8 +60,12 @@ audio file, insertion interval, and playlist destination.
 The **Normalize volume** tab creates Opus 160k copies in a separate output
 folder. It preserves relative subfolders and metadata, skips completed outputs,
 and never changes source files. The output folder must differ from the source
-folder. Pause takes effect before the next FFmpeg step; Stop cancels an active
-FFmpeg process and safely removes partial output.
+folder. Pause takes effect before the next FFmpeg step; Stop cancels the active
+FFmpeg processes and safely removes partial output.
+
+Several files are encoded at once, so progress is reported per file rather than
+in scan order. Files that could not be normalized are counted separately, and
+the reason for each one appears under **Error details**.
 
 Only one operation runs at a time, so both tabs stay disabled while either is
 working. Status and error detail are shared by both tabs.
@@ -100,9 +107,11 @@ dotnet run --project src/PlaylistGenerator.Cli -- normalize-volume --help
 ```
 
 Exit codes: `0` success, `1` an operation failed, `2` the command line could not
-be interpreted, `70` an unexpected internal error, `130` interrupted. Successful
-playlist and normalization runs also print a snake-case JSON summary for
-scripting.
+be interpreted, `70` an unexpected internal error, `130` interrupted. A
+normalization run that finished but could not convert every file also exits `1`.
+Playlist and normalization runs print a snake-case JSON summary for scripting;
+the normalization summary includes `failed_file_count` and a `failures` array
+naming each file and its reason.
 
 ## Local Executable Builds
 
@@ -176,7 +185,8 @@ computer.
 - `src/PlaylistGenerator.Desktop/`: Avalonia views, desktop adapters, and GUI
   host.
 - `src/PlaylistGenerator.Cli/`: thin console executable host.
-- `tests/PlaylistGenerator.Tests/`: xUnit v3 tests, mirroring the source layout.
+- `tests/PlaylistGenerator.Tests/`: xUnit v3 tests, mirroring the source layout,
+  including headless Avalonia tests that need no display server.
 - `scripts/`: local validation, hook installation, and release publishing.
 - `.githooks/`: repository-owned local Git hooks.
 - `docs/`: maintainer and testing documentation.

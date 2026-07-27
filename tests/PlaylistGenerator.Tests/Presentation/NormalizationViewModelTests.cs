@@ -60,44 +60,47 @@ public sealed class NormalizationViewModelTests
     [Fact]
     public async Task ProgressAndResultCountsReachTheViewModel()
     {
-        NormalizationViewModel? viewModel = null;
         var normalizer = new FakeAudioNormalizer
         {
-            Handler = async (request, progress, _, token) =>
+            // The closing progress report and the summary agree, which is what a real run
+            // produces. Asserting on values the two disagree about would only be testing
+            // which of them the runtime happened to deliver last.
+            Handler = (request, progress, _, _) =>
             {
                 progress?.Report(
                     new NormalizationProgress(
                         3,
+                        3,
                         2,
                         1,
-                        1,
+                        0,
                         "music/two.flac",
-                        NormalizationAction.Encoding));
+                        NormalizationAction.Completed));
 
-                while (viewModel?.ProgressMaximum != 3)
-                {
-                    await Task.Delay(1, token).ConfigureAwait(false);
-                }
-
-                return new NormalizationResult(
-                    request.SourceDirectory,
-                    request.OutputDirectory,
-                    2,
-                    1,
-                    false);
+                return Task.FromResult(
+                    NormalizationResults.Create(
+                        request.SourceDirectory,
+                        request.OutputDirectory,
+                        normalizedFileCount: 2,
+                        skippedFileCount: 1));
             },
         };
         var status = new StatusViewModel();
-        viewModel = CreateViewModel(normalizer, status: status);
+        var viewModel = CreateViewModel(normalizer, status: status);
         viewModel.SourceDirectory = "music";
         viewModel.OutputDirectory = "normalized";
 
         await viewModel.NormalizeCommand.ExecuteAsync(null);
 
+        // Only a progress report sets the bar's bounds, so waiting on them proves the report
+        // arrived rather than assuming it beat the run's completion.
+        await Eventually.TrueAsync(
+            () => viewModel.ProgressMaximum == 3 && viewModel.ProgressValue == 3,
+            TestContext.Current.CancellationToken,
+            "The progress report never reached the view model.");
+
         Assert.Equal(2, viewModel.NormalizedFileCount);
         Assert.Equal(1, viewModel.SkippedFileCount);
-        Assert.Equal(3, viewModel.ProgressMaximum);
-        Assert.Equal(2, viewModel.ProgressValue);
         Assert.Contains("complete", status.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -127,12 +130,9 @@ public sealed class NormalizationViewModelTests
 
             // Hold the run open so the reset state can be observed mid-flight.
             await Task.Yield();
-            return new NormalizationResult(
+            return NormalizationResults.Create(
                 request.SourceDirectory,
-                request.OutputDirectory,
-                0,
-                0,
-                false);
+                request.OutputDirectory);
         };
 
         var operation = viewModel.NormalizeCommand.ExecuteAsync(null);
@@ -160,12 +160,10 @@ public sealed class NormalizationViewModelTests
                 }
                 catch (OperationCanceledException)
                 {
-                    return new NormalizationResult(
+                    return NormalizationResults.Create(
                         request.SourceDirectory,
                         request.OutputDirectory,
-                        0,
-                        0,
-                        true);
+                        stopped: true);
                 }
 
                 throw new InvalidOperationException("Unreachable");
@@ -205,12 +203,10 @@ public sealed class NormalizationViewModelTests
 
                 // A paused run must still observe cancellation rather than parking forever.
                 await pauseSignal!.WaitWhilePausedAsync(token);
-                return new NormalizationResult(
+                return NormalizationResults.Create(
                     request.SourceDirectory,
                     request.OutputDirectory,
-                    0,
-                    0,
-                    true);
+                    stopped: true);
             },
         };
         var viewModel = CreateViewModel(normalizer);
@@ -269,12 +265,10 @@ public sealed class NormalizationViewModelTests
                 }
                 catch (OperationCanceledException)
                 {
-                    return new NormalizationResult(
+                    return NormalizationResults.Create(
                         request.SourceDirectory,
                         request.OutputDirectory,
-                        0,
-                        0,
-                        true);
+                        stopped: true);
                 }
 
                 throw new InvalidOperationException("Unreachable");
@@ -285,6 +279,107 @@ public sealed class NormalizationViewModelTests
         var operation = viewModel.NormalizeCommand.ExecuteAsync(null);
         await started.Task;
         viewModel.CancelActiveRun();
+        await operation;
+
+        Assert.False(viewModel.IsRunning);
+    }
+
+    [Fact]
+    public async Task ACanceledFolderDialogChangesNothing()
+    {
+        // An empty queue stands in for a dialog the user dismissed.
+        var viewModel = CreateViewModel(picker: new FakeFilePickerService());
+
+        await viewModel.BrowseSourceCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, viewModel.SourceDirectory);
+        Assert.Equal(string.Empty, viewModel.OutputDirectory);
+    }
+
+    [Fact]
+    public async Task ARunCanceledBeforeAnyFileFinishesReportsAStoppedMessage()
+    {
+        var normalizer = new FakeAudioNormalizer
+        {
+            Handler = (_, _, _, token) => Task.FromException<NormalizationResult>(
+                new OperationCanceledException(token)),
+        };
+        var status = new StatusViewModel();
+        var coordinator = new OperationCoordinator();
+        var viewModel = CreateViewModel(normalizer, status: status, coordinator: coordinator);
+
+        await viewModel.NormalizeCommand.ExecuteAsync(null);
+
+        Assert.Contains("stopped", status.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(viewModel.IsRunning);
+        Assert.False(coordinator.IsBusy);
+    }
+
+    [Fact]
+    public async Task FailedFilesAreCountedAndExplained()
+    {
+        var normalizer = new FakeAudioNormalizer
+        {
+            Failures =
+            [
+                new NormalizationFailure("/music/broken.mp3", "corrupt header"),
+            ],
+        };
+        var status = new StatusViewModel();
+        var viewModel = CreateViewModel(normalizer, status: status);
+
+        await viewModel.NormalizeCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, viewModel.FailedFileCount);
+        Assert.Contains("1 failed", status.Message, StringComparison.Ordinal);
+
+        // The reasons belong in the expander, not the one-line status.
+        Assert.True(status.HasErrorDetails);
+        Assert.Contains("corrupt header", status.ErrorDetails, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASucceedingRunLeavesNoStaleFailureDetail()
+    {
+        var normalizer = new FakeAudioNormalizer
+        {
+            Failures = [new NormalizationFailure("/music/broken.mp3", "corrupt header")],
+        };
+        var status = new StatusViewModel();
+        var viewModel = CreateViewModel(normalizer, status: status);
+        await viewModel.NormalizeCommand.ExecuteAsync(null);
+
+        normalizer.Failures = [];
+        await viewModel.NormalizeCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, viewModel.FailedFileCount);
+        Assert.False(status.HasErrorDetails);
+    }
+
+    [Fact]
+    public async Task DisposingWhileRunningUnwindsTheRun()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var normalizer = new FakeAudioNormalizer
+        {
+            Handler = async (request, _, pauseSignal, token) =>
+            {
+                started.SetResult();
+                await pauseSignal!.WaitWhilePausedAsync(token);
+                return NormalizationResults.Create(
+                    request.SourceDirectory,
+                    request.OutputDirectory,
+                    stopped: true);
+            },
+        };
+        var viewModel = CreateViewModel(normalizer);
+
+        var operation = viewModel.NormalizeCommand.ExecuteAsync(null);
+        await started.Task;
+        viewModel.PauseCommand.Execute(null);
+
+        // Disposal must release a parked run rather than leaving it holding forever.
+        viewModel.Dispose();
         await operation;
 
         Assert.False(viewModel.IsRunning);

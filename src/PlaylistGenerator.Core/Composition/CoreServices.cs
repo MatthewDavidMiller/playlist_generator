@@ -46,17 +46,26 @@ public sealed class CoreServices
     /// Builds the production object graph backed by the real filesystem and process APIs.
     /// </summary>
     public static CoreServices CreateDefault() =>
-        Create(new AudioFileCatalog(), new ExecutableLocator(), new ProcessRunner(), new RandomTrackShuffler());
+        Create(
+            new AudioFileCatalog(),
+            new ExecutableLocator(),
+            new ProcessRunner(),
+            new RandomTrackShuffler());
 
     /// <summary>
     /// Builds the object graph over caller-supplied infrastructure, for tests and for hosts
     /// that need a deterministic shuffle.
     /// </summary>
+    /// <param name="maxDegreeOfParallelism">
+    /// Files normalized at once. Defaults to a value sized for the current machine; pass
+    /// <c>1</c> for a strictly sequential run.
+    /// </param>
     public static CoreServices Create(
         IAudioFileCatalog catalog,
         IExecutableLocator executableLocator,
         IProcessRunner processRunner,
-        ITrackShuffler shuffler)
+        ITrackShuffler shuffler,
+        int? maxDegreeOfParallelism = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(executableLocator);
@@ -68,7 +77,12 @@ public sealed class CoreServices
             executableLocator,
             processRunner,
             new PlaylistGeneratorService(catalog, shuffler),
-            new AudioNormalizationService(catalog, executableLocator, processRunner),
+            new AudioNormalizationService(
+                catalog,
+                executableLocator,
+                processRunner,
+                maxDegreeOfParallelism
+                    ?? AudioNormalizationService.DefaultMaxDegreeOfParallelism),
             new FfmpegInstallAdvisor(executableLocator));
     }
 }

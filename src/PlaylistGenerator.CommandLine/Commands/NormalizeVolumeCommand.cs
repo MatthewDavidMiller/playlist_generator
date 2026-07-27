@@ -52,12 +52,25 @@ public sealed class NormalizeVolumeCommand : ICliCommand
         await output
             .WriteLineAsync($"Normalized audio written to {result.OutputDirectory}")
             .ConfigureAwait(false);
+
+        foreach (var failure in result.Failures)
+        {
+            await output
+                .WriteLineAsync($"Failed: {failure.SourcePath}: {failure.Reason}")
+                .ConfigureAwait(false);
+        }
+
         await output.WriteLineAsync(ResultJson.Serialize(result)).ConfigureAwait(false);
 
         // A stopped run reports what it completed rather than throwing, so the interrupt
         // has to be turned back into the conventional exit code here.
-        return result.Stopped && cancellationToken.IsCancellationRequested
-            ? ExitCode.Canceled
-            : ExitCode.Success;
+        if (result.Stopped && cancellationToken.IsCancellationRequested)
+        {
+            return ExitCode.Canceled;
+        }
+
+        // A run that skipped past broken files did not fully succeed, and a script checking
+        // the exit code needs to know that without parsing the JSON summary.
+        return result.Failures.Count > 0 ? ExitCode.Failure : ExitCode.Success;
     }
 }

@@ -20,6 +20,9 @@ public enum NormalizationAction
     /// <summary>The file finished successfully.</summary>
     Completed,
 
+    /// <summary>The file could not be normalized; the rest of the run continued.</summary>
+    Failed,
+
     /// <summary>The run was canceled before this file finished.</summary>
     Stopped,
 }

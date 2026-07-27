@@ -18,15 +18,63 @@ public static class LoudnessJsonParser
     {
         ArgumentNullException.ThrowIfNull(output);
 
-        var objectEnd = output.LastIndexOf('}');
-        var foundObjectSyntax = false;
+        return TryParse(output, sourcePath, out var stats, out var foundObjectSyntax)
+            ? stats
+            : throw NotFound(foundObjectSyntax, sourcePath);
+    }
 
+    /// <summary>
+    /// Parses the stream FFmpeg normally prints to, falling back to the other one.
+    /// </summary>
+    /// <remarks>
+    /// Which stream carries the summary has changed between FFmpeg versions. Trying them in
+    /// turn avoids joining two potentially large logs into a third copy just to search it.
+    /// </remarks>
+    /// <exception cref="PlaylistIOException">Neither stream held a usable analysis object.</exception>
+    public static LoudnessStats Parse(
+        string primaryOutput,
+        string fallbackOutput,
+        string sourcePath)
+    {
+        ArgumentNullException.ThrowIfNull(primaryOutput);
+        ArgumentNullException.ThrowIfNull(fallbackOutput);
+
+        if (TryParse(primaryOutput, sourcePath, out var stats, out var foundInPrimary))
+        {
+            return stats;
+        }
+
+        if (TryParse(fallbackOutput, sourcePath, out stats, out var foundInFallback))
+        {
+            return stats;
+        }
+
+        throw NotFound(foundInPrimary || foundInFallback, sourcePath);
+    }
+
+    /// <summary>
+    /// Scans <paramref name="output"/> backwards for the last parsable object.
+    /// </summary>
+    /// <param name="foundObjectSyntax">
+    /// Whether anything object-shaped was present at all, which separates "FFmpeg printed
+    /// nothing usable" from "FFmpeg printed something malformed".
+    /// </param>
+    private static bool TryParse(
+        string output,
+        string sourcePath,
+        out LoudnessStats stats,
+        out bool foundObjectSyntax)
+    {
+        foundObjectSyntax = false;
+        stats = null!;
+
+        var objectEnd = output.LastIndexOf('}');
         while (objectEnd >= 0)
         {
             var objectStart = output.LastIndexOf('{', objectEnd);
             if (objectStart < 0)
             {
-                break;
+                return false;
             }
 
             foundObjectSyntax = true;
@@ -34,32 +82,33 @@ public static class LoudnessJsonParser
             {
                 using var document = JsonDocument.Parse(
                     output.AsMemory(objectStart, objectEnd - objectStart + 1));
-                var root = document.RootElement;
 
                 // Argument evaluation is left to right, so the first missing field is the
-                // one reported.
-                return new LoudnessStats(
-                    ReadRequiredValue(root, "input_i", sourcePath),
-                    ReadRequiredValue(root, "input_tp", sourcePath),
-                    ReadRequiredValue(root, "input_lra", sourcePath),
-                    ReadRequiredValue(root, "input_thresh", sourcePath),
-                    ReadRequiredValue(root, "target_offset", sourcePath));
+                // one reported. A present-but-unusable object is a hard failure rather than
+                // a reason to keep scanning, because it is the analysis FFmpeg produced.
+                stats = new LoudnessStats(
+                    ReadRequiredValue(document.RootElement, "input_i", sourcePath),
+                    ReadRequiredValue(document.RootElement, "input_tp", sourcePath),
+                    ReadRequiredValue(document.RootElement, "input_lra", sourcePath),
+                    ReadRequiredValue(document.RootElement, "input_thresh", sourcePath),
+                    ReadRequiredValue(document.RootElement, "target_offset", sourcePath));
+                return true;
             }
             catch (JsonException)
             {
-                if (objectEnd == 0)
-                {
-                    break;
-                }
-
+                // A closing brace at index 0 cannot have an opening brace before it, so the
+                // search above has already returned by the time the index would underflow.
                 objectEnd = output.LastIndexOf('}', objectEnd - 1);
             }
         }
 
-        var reason = foundObjectSyntax ? "malformed" : "missing";
-        throw new PlaylistIOException(
-            $"FFmpeg returned {reason} loudness analysis JSON for '{sourcePath}'.");
+        return false;
     }
+
+    private static PlaylistIOException NotFound(bool foundObjectSyntax, string sourcePath) =>
+        new(
+            $"FFmpeg returned {(foundObjectSyntax ? "malformed" : "missing")} loudness "
+            + $"analysis JSON for '{sourcePath}'.");
 
     private static string ReadRequiredValue(
         JsonElement root,

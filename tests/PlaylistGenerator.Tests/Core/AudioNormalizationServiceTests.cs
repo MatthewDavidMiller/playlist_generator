@@ -188,7 +188,9 @@ public sealed class AudioNormalizationServiceTests
                 Assert.InRange(progress.CompletedFileCount, 0, progress.TotalFileCount);
                 Assert.Equal(
                     progress.CompletedFileCount,
-                    progress.NormalizedFileCount + progress.SkippedFileCount);
+                    progress.NormalizedFileCount
+                        + progress.SkippedFileCount
+                        + progress.FailedFileCount);
             });
     }
 
@@ -273,12 +275,12 @@ public sealed class AudioNormalizationServiceTests
         temporary.CreateFile("music/one.mp3");
         var runner = new FakeProcessRunner { CreateEncodedFile = false };
 
-        var exception = await Assert.ThrowsAsync<PlaylistIOException>(
-            () => CreateService(runner).NormalizeAsync(
-                new NormalizationRequest(source, temporary.GetPath("normalized")),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains("did not create", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, result.NormalizedFileCount);
+        Assert.Contains("did not create", Assert.Single(result.Failures).Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -286,20 +288,21 @@ public sealed class AudioNormalizationServiceTests
     {
         using var temporary = new TemporaryDirectory();
         var source = temporary.CreateDirectory("music");
-        temporary.CreateFile("music/one.mp3");
+        var track = temporary.CreateFile("music/one.mp3");
         var runner = new FakeProcessRunner
         {
             AnalysisExitCode = 1,
             AnalysisOutput = "invalid audio stream",
         };
 
-        var exception = await Assert.ThrowsAsync<PlaylistIOException>(
-            () => CreateService(runner).NormalizeAsync(
-                new NormalizationRequest(source, temporary.GetPath("normalized")),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains("failed to analyze", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("invalid audio stream", exception.Message, StringComparison.Ordinal);
+        var failure = Assert.Single(result.Failures);
+        Assert.Equal(track, failure.SourcePath);
+        Assert.Contains("failed to analyze", failure.Reason, StringComparison.Ordinal);
+        Assert.Contains("invalid audio stream", failure.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -310,13 +313,13 @@ public sealed class AudioNormalizationServiceTests
         temporary.CreateFile("music/one.mp3");
         var runner = new FakeProcessRunner { EncodeExitCode = 1 };
 
-        var exception = await Assert.ThrowsAsync<PlaylistIOException>(
-            () => CreateService(runner).NormalizeAsync(
-                new NormalizationRequest(source, temporary.GetPath("normalized")),
-                cancellationToken: TestContext.Current.CancellationToken));
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.Contains("failed to encode", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("encoding failed", exception.Message, StringComparison.Ordinal);
+        var failure = Assert.Single(result.Failures);
+        Assert.Contains("failed to encode", failure.Reason, StringComparison.Ordinal);
+        Assert.Contains("encoding failed", failure.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -333,13 +336,318 @@ public sealed class AudioNormalizationServiceTests
             AnalysisOutput = new string('x', 10_000) + "REAL-CAUSE",
         };
 
-        var exception = await Assert.ThrowsAsync<PlaylistIOException>(
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var reason = Assert.Single(result.Failures).Reason;
+        Assert.Contains("REAL-CAUSE", reason, StringComparison.Ordinal);
+        Assert.True(reason.Length < 5_000);
+    }
+
+    [Fact]
+    public async Task OneUnusableFileDoesNotDiscardTheRestOfTheRun()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/a-good.mp3");
+        var broken = temporary.CreateFile("music/b-broken.mp3");
+        temporary.CreateFile("music/c-good.mp3");
+        var runner = new FakeProcessRunner
+        {
+            Handler = async (arguments, token) =>
+            {
+                var input = arguments.ValueAfter("-i");
+                if (string.Equals(input, broken, StringComparison.Ordinal))
+                {
+                    return new ProcessResult(1, string.Empty, "corrupt header");
+                }
+
+                if (FakeProcessRunner.IsAnalysisCall(arguments))
+                {
+                    return new ProcessResult(0, string.Empty, FakeProcessRunner.ValidAnalysisJson);
+                }
+
+                await File.WriteAllBytesAsync(arguments[^1], [1, 2, 3], token);
+                return new ProcessResult(0, string.Empty, string.Empty);
+            },
+        };
+
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, result.NormalizedFileCount);
+        Assert.Equal(1, result.FailedFileCount);
+        Assert.False(result.Stopped);
+        Assert.Equal(broken, Assert.Single(result.Failures).SourcePath);
+
+        // The files on either side of the broken one still produced output.
+        Assert.True(File.Exists(temporary.GetPath("normalized/a-good.opus")));
+        Assert.True(File.Exists(temporary.GetPath("normalized/c-good.opus")));
+        Assert.False(File.Exists(temporary.GetPath("normalized/b-broken.opus")));
+    }
+
+    [Fact]
+    public async Task AFailedFileIsReportedAsProgressAndCountedAsCompleted()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+        var runner = new FakeProcessRunner { AnalysisExitCode = 1 };
+        var events = new List<NormalizationProgress>();
+
+        await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            new ImmediateProgress<NormalizationProgress>(events.Add),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(NormalizationAction.Failed, events[^1].Action);
+        Assert.Equal(1, events[^1].FailedFileCount);
+
+        // A failed file is finished, so the progress bar must reach the end rather than stall.
+        Assert.Equal(events[^1].TotalFileCount, events[^1].CompletedFileCount);
+    }
+
+    [Fact]
+    public async Task ASourceThatDisappearsBeforeItsTurnFailsOnlyThatFile()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/a-one.mp3");
+        var vanishing = temporary.CreateFile("music/b-two.mp3");
+        var runner = new FakeProcessRunner
+        {
+            Handler = async (arguments, token) =>
+            {
+                // Delete the second file while the first is still being processed.
+                File.Delete(vanishing);
+                if (FakeProcessRunner.IsAnalysisCall(arguments))
+                {
+                    return new ProcessResult(0, string.Empty, FakeProcessRunner.ValidAnalysisJson);
+                }
+
+                await File.WriteAllBytesAsync(arguments[^1], [1, 2, 3], token);
+                return new ProcessResult(0, string.Empty, string.Empty);
+            },
+        };
+
+        var result = await CreateService(runner).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.NormalizedFileCount);
+        Assert.Contains(
+            "became unavailable",
+            Assert.Single(result.Failures).Reason,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NormalizesEveryFileWhenSeveralRunAtOnce()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        for (var index = 0; index < 24; index++)
+        {
+            temporary.CreateFile($"music/track-{index:D2}.mp3");
+        }
+
+        var result = await CreateService(maxDegreeOfParallelism: 4).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(24, result.NormalizedFileCount);
+        Assert.Empty(result.Failures);
+        Assert.Equal(
+            24,
+            Directory.GetFiles(temporary.GetPath("normalized"), "*.opus").Length);
+    }
+
+    [Fact]
+    public async Task SeveralFilesAreEncodedConcurrently()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        for (var index = 0; index < 8; index++)
+        {
+            temporary.CreateFile($"music/track-{index:D2}.mp3");
+        }
+
+        var inFlight = 0;
+        var peakInFlight = 0;
+        var peakGate = new Lock();
+        var runner = new FakeProcessRunner
+        {
+            Handler = async (arguments, token) =>
+            {
+                var current = Interlocked.Increment(ref inFlight);
+                lock (peakGate)
+                {
+                    peakInFlight = Math.Max(peakInFlight, current);
+                }
+
+                try
+                {
+                    // Long enough that a sequential run could not overlap two calls.
+                    await Task.Delay(30, token);
+                    if (FakeProcessRunner.IsAnalysisCall(arguments))
+                    {
+                        return new ProcessResult(
+                            0,
+                            string.Empty,
+                            FakeProcessRunner.ValidAnalysisJson);
+                    }
+
+                    await File.WriteAllBytesAsync(arguments[^1], [1, 2, 3], token);
+                    return new ProcessResult(0, string.Empty, string.Empty);
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref inFlight);
+                }
+            },
+        };
+
+        var result = await CreateService(runner, maxDegreeOfParallelism: 4).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(8, result.NormalizedFileCount);
+        Assert.InRange(peakInFlight, 2, 4);
+    }
+
+    [Fact]
+    public async Task ConcurrentProgressCountsStayConsistent()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        for (var index = 0; index < 32; index++)
+        {
+            temporary.CreateFile($"music/track-{index:D2}.mp3");
+        }
+
+        var events = new List<NormalizationProgress>();
+        var gate = new Lock();
+
+        await CreateService(maxDegreeOfParallelism: 4).NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            new ImmediateProgress<NormalizationProgress>(progress =>
+            {
+                lock (gate)
+                {
+                    events.Add(progress);
+                }
+            }),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.All(
+            events,
+            progress =>
+            {
+                Assert.InRange(progress.CompletedFileCount, 0, progress.TotalFileCount);
+                Assert.Equal(
+                    progress.CompletedFileCount,
+                    progress.NormalizedFileCount
+                        + progress.SkippedFileCount
+                        + progress.FailedFileCount);
+            });
+
+        // Reports are published under one lock, so the completed count never runs backwards.
+        var completed = events.Select(progress => progress.CompletedFileCount).ToArray();
+        Assert.Equal(completed.Order().ToArray(), completed);
+    }
+
+    [Fact]
+    public async Task ARunCanceledWithNothingLeftToDoStillReportsStopped()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+
+        // The output already exists, so the plan has no jobs to schedule at all.
+        temporary.CreateFile("normalized/one.opus");
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        await cancellation.CancelAsync();
+
+        var result = await CreateService().NormalizeAsync(
+            new NormalizationRequest(source, temporary.GetPath("normalized")),
+            cancellationToken: cancellation.Token);
+
+        Assert.True(result.Stopped);
+        Assert.Equal(1, result.SkippedFileCount);
+    }
+
+    [Fact]
+    public async Task AnUnwritableDestinationBecomesAFailureRatherThanACrash()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Unix file permissions are required.");
+            return;
+        }
+
+        Assert.SkipWhen(
+            Environment.GetEnvironmentVariable("USER") == "root",
+            "Root bypasses the permission bits this test relies on.");
+
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/album/one.mp3");
+        var output = temporary.CreateDirectory("normalized");
+        File.SetUnixFileMode(output, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+        try
+        {
+            var result = await CreateService().NormalizeAsync(
+                new NormalizationRequest(source, output),
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(0, result.NormalizedFileCount);
+            Assert.Contains(
+                "Unable to normalize",
+                Assert.Single(result.Failures).Reason,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                output,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public async Task AnUnexpectedFaultSurfacesAsItselfRatherThanAnAggregate()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+        var runner = new FakeProcessRunner
+        {
+            Handler = (_, _) => throw new InvalidOperationException("defective runner"),
+        };
+
+        // Only expected failures are recorded per file; a defect must still reach the caller,
+        // and awaiting the parallel loop must not bury it inside an AggregateException.
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => CreateService(runner).NormalizeAsync(
                 new NormalizationRequest(source, temporary.GetPath("normalized")),
                 cancellationToken: TestContext.Current.CancellationToken));
 
-        Assert.Contains("REAL-CAUSE", exception.Message, StringComparison.Ordinal);
-        Assert.True(exception.Message.Length < 5_000);
+        Assert.Equal("defective runner", exception.Message);
+    }
+
+    [Fact]
+    public void RejectsAWorkerCountBelowOne()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new AudioNormalizationService(
+                new AudioFileCatalog(),
+                new FakeExecutableLocator(),
+                new FakeProcessRunner(),
+                0));
     }
 
     [Fact]
@@ -413,12 +721,17 @@ public sealed class AudioNormalizationServiceTests
         temporary.CreateFile("music/one.mp3");
         var controller = new PauseController();
         controller.Pause();
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var task = CreateService().NormalizeAsync(
             new NormalizationRequest(source, temporary.GetPath("normalized")),
-            pauseSignal: controller,
-            cancellationToken: TestContext.Current.CancellationToken);
-        await Task.Yield();
+            OnPaused(paused),
+            controller,
+            TestContext.Current.CancellationToken);
+
+        // Waiting for the reported pause is deterministic; yielding once would only test
+        // whether a pool thread happened to be scheduled yet.
+        await paused.Task;
         Assert.False(task.IsCompleted);
 
         controller.Resume();
@@ -432,6 +745,8 @@ public sealed class AudioNormalizationServiceTests
         var source = temporary.CreateDirectory("music");
         temporary.CreateFile("music/one.mp3");
         var controller = new PauseController();
+        var analyzed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new FakeProcessRunner
         {
             Handler = async (arguments, token) =>
@@ -439,6 +754,7 @@ public sealed class AudioNormalizationServiceTests
                 if (FakeProcessRunner.IsAnalysisCall(arguments))
                 {
                     controller.Pause();
+                    analyzed.SetResult();
                     return new ProcessResult(0, string.Empty, FakeProcessRunner.ValidAnalysisJson);
                 }
 
@@ -449,9 +765,12 @@ public sealed class AudioNormalizationServiceTests
 
         var task = CreateService(runner).NormalizeAsync(
             new NormalizationRequest(source, temporary.GetPath("normalized")),
-            pauseSignal: controller,
-            cancellationToken: TestContext.Current.CancellationToken);
-        await Task.Yield();
+            OnPaused(paused),
+            controller,
+            TestContext.Current.CancellationToken);
+
+        await analyzed.Task;
+        await paused.Task;
 
         // The encode pass must not have started while the pause is held.
         Assert.False(task.IsCompleted);
@@ -470,14 +789,17 @@ public sealed class AudioNormalizationServiceTests
         temporary.CreateFile("music/one.mp3");
         var controller = new PauseController();
         controller.Pause();
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             TestContext.Current.CancellationToken);
 
         var task = CreateService().NormalizeAsync(
             new NormalizationRequest(source, temporary.GetPath("normalized")),
-            pauseSignal: controller,
-            cancellationToken: cancellation.Token);
-        await Task.Yield();
+            OnPaused(paused),
+            controller,
+            cancellation.Token);
+
+        await paused.Task;
         Assert.False(task.IsCompleted);
 
         await cancellation.CancelAsync();
@@ -496,15 +818,31 @@ public sealed class AudioNormalizationServiceTests
         var controller = new PauseController();
         controller.Pause();
         var events = new List<NormalizationProgress>();
+        var gate = new Lock();
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var task = CreateService().NormalizeAsync(
             new NormalizationRequest(source, temporary.GetPath("normalized")),
-            new ImmediateProgress<NormalizationProgress>(events.Add),
+            new ImmediateProgress<NormalizationProgress>(progress =>
+            {
+                lock (gate)
+                {
+                    events.Add(progress);
+                }
+
+                if (progress.Action == NormalizationAction.Paused)
+                {
+                    paused.TrySetResult();
+                }
+            }),
             controller,
             TestContext.Current.CancellationToken);
-        await Task.Yield();
 
-        Assert.Contains(events, progress => progress.Action == NormalizationAction.Paused);
+        await paused.Task;
+        lock (gate)
+        {
+            Assert.Contains(events, progress => progress.Action == NormalizationAction.Paused);
+        }
 
         controller.Resume();
         await task;
@@ -532,6 +870,29 @@ public sealed class AudioNormalizationServiceTests
             () => new AudioNormalizationService(catalog, locator, null!));
     }
 
-    private static AudioNormalizationService CreateService(FakeProcessRunner? runner = null) =>
-        new(new AudioFileCatalog(), new FakeExecutableLocator(), runner ?? new FakeProcessRunner());
+    /// <summary>
+    /// Completes <paramref name="paused"/> once the run reports that it is holding, which is
+    /// the only deterministic way to observe work that runs on a thread-pool worker.
+    /// </summary>
+    private static ImmediateProgress<NormalizationProgress> OnPaused(TaskCompletionSource paused) =>
+        new(progress =>
+        {
+            if (progress.Action == NormalizationAction.Paused)
+            {
+                paused.TrySetResult();
+            }
+        });
+
+    /// <summary>
+    /// Builds a service that runs one file at a time, so ordering assertions stay meaningful.
+    /// Concurrency is exercised deliberately by the tests that pass a higher worker count.
+    /// </summary>
+    private static AudioNormalizationService CreateService(
+        FakeProcessRunner? runner = null,
+        int maxDegreeOfParallelism = 1) =>
+        new(
+            new AudioFileCatalog(),
+            new FakeExecutableLocator(),
+            runner ?? new FakeProcessRunner(),
+            maxDegreeOfParallelism);
 }

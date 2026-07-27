@@ -67,6 +67,30 @@ public sealed class StatusViewModelTests
     }
 
     [Fact]
+    public void ReportingDetailsLeavesTheStatusLineAlone()
+    {
+        var status = new StatusViewModel();
+        status.Report("Normalization complete.");
+
+        status.ReportDetails("one.mp3: corrupt header");
+
+        Assert.Equal("Normalization complete.", status.Message);
+        Assert.True(status.HasErrorDetails);
+        Assert.Equal("one.mp3: corrupt header", status.ErrorDetails);
+    }
+
+    [Fact]
+    public void ReportingEmptyDetailsHidesTheExpander()
+    {
+        var status = new StatusViewModel();
+        status.ReportDetails("something went wrong");
+
+        status.ReportDetails(string.Empty);
+
+        Assert.False(status.HasErrorDetails);
+    }
+
+    [Fact]
     public void RejectsANullException() =>
         Assert.Throws<ArgumentNullException>(() => new StatusViewModel().ReportFailure(null!));
 }

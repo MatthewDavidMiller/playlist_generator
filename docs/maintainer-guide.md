@@ -54,6 +54,35 @@ and implements it.
 
 Each public type gets its own file, named after it.
 
+### Normalization Concurrency And Failures
+
+`AudioNormalizationService` encodes several files at once through
+`Parallel.ForEachAsync`. Both FFmpeg passes are processor-bound and each works
+on a single file, so a sequential run leaves most of a multi-core machine idle.
+Concurrent workers are safe because `NormalizationPlanner` has already proven
+every destination path distinct before any process starts.
+
+The worker count defaults to `AudioNormalizationService.DefaultMaxDegreeOfParallelism`,
+which is the processor count capped at eight; FFmpeg spawns threads of its own and
+both passes also read from disk. Pass an explicit count to the four-argument
+constructor, or through `CoreServices.Create`, to override it. Tests pass `1`
+when they assert on ordering.
+
+`NormalizationProgressReporter` owns every counter. It updates them and
+publishes the matching report under one lock, which costs a little concurrency
+but keeps reported counts monotonic; without it a progress bar runs backwards
+when two workers finish together.
+
+A file that cannot be normalized is recorded in `NormalizationResult.Failures`
+and the run continues. Losing hours of completed work to one unreadable file
+would make a large library impractical to process, and the run is resumable, so
+a later run retries only what is missing. Cancellation still stops the whole
+run.
+
+Anything that observes work started by a worker must synchronize on an actual
+signal. Bodies are dispatched to the thread pool, so a single `Task.Yield` no
+longer implies that a file has begun processing.
+
 ### Composition
 
 `Core/Composition/CoreServices` is the single composition root. Both
@@ -73,7 +102,13 @@ into another.
 
 AXAML binds through full paths from the window's `x:DataType`, for example
 `{Binding Playlist.SourceDirectory}`, so every path is verified by the compiled
-bindings at build time.
+bindings at build time. `tests/PlaylistGenerator.Tests/Desktop/` then loads the
+window headlessly and checks that those bindings carry real values.
+
+A transport command that can complete the run, such as `Resume` or `Stop`,
+publishes its transient status message *before* releasing or cancelling the
+run. The run's completion message is written from another thread, and acting
+first lets the transient message overwrite the final outcome.
 
 ### Adding a CLI Command
 

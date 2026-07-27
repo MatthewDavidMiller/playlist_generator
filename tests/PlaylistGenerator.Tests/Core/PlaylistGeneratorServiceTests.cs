@@ -192,6 +192,43 @@ public sealed class PlaylistGeneratorServiceTests
     }
 
     [Fact]
+    public void CreatesAMissingDestinationDirectory()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+        var special = temporary.CreateFile("id.mp3");
+        var output = temporary.GetPath("playlists/nested/mix.m3u8");
+
+        var result = CreateService().Generate(new PlaylistRequest(source, special, 2, output));
+
+        Assert.Equal(output, result.OutputPath);
+        Assert.True(File.Exists(output));
+    }
+
+    [Fact]
+    public void ReportsAWriteThatCannotSucceed()
+    {
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/one.mp3");
+        var special = temporary.CreateFile("id.mp3");
+
+        // A directory already occupies the output path, so the write can never complete.
+        var output = temporary.CreateDirectory("occupied.m3u8");
+
+        var exception = Assert.Throws<PlaylistIOException>(
+            () => CreateService().Generate(new PlaylistRequest(source, special, 2, output)));
+
+        Assert.Contains("Unable to write playlist", exception.Message, StringComparison.Ordinal);
+
+        // The failed write must not strand a temporary file next to the destination.
+        Assert.DoesNotContain(
+            temporary.EnumerateRelativeFiles(),
+            file => file.Contains(".tmp", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RejectsANullRequest() =>
         Assert.Throws<ArgumentNullException>(() => CreateService().Generate(null!));
 

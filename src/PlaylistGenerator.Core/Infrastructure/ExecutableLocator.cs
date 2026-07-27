@@ -5,6 +5,11 @@ namespace PlaylistGenerator.Core.Infrastructure;
 /// <summary>
 /// Resolves executables against the process search path.
 /// </summary>
+/// <remarks>
+/// The Windows executable extensions are read from the environment once per lookup and then
+/// passed down. They were previously re-read and re-split for every candidate tested, which
+/// repeated the same work for every entry on a long <c>PATH</c>.
+/// </remarks>
 public sealed class ExecutableLocator : IExecutableLocator
 {
     /// <summary>Extensions tried on Windows when <c>PATHEXT</c> is unset or empty.</summary>
@@ -18,10 +23,14 @@ public sealed class ExecutableLocator : IExecutableLocator
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executableName);
 
+        // Empty on every other platform, which is also what makes "append an extension"
+        // a no-op there.
+        var windowsExtensions = OperatingSystem.IsWindows() ? GetWindowsExtensions() : [];
+
         if (executableName.Contains(Path.DirectorySeparatorChar)
             || executableName.Contains(Path.AltDirectorySeparatorChar))
         {
-            return FindAtExplicitPath(executableName);
+            return FindAtExplicitPath(executableName, windowsExtensions);
         }
 
         var searchPath = Environment.GetEnvironmentVariable("PATH");
@@ -31,7 +40,7 @@ public sealed class ExecutableLocator : IExecutableLocator
         }
 
         // Resolved once rather than per search-path entry.
-        var candidateNames = GetCandidateNames(executableName);
+        var candidateNames = GetCandidateNames(executableName, windowsExtensions);
 
         foreach (var directory in searchPath.Split(Path.PathSeparator))
         {
@@ -56,7 +65,7 @@ public sealed class ExecutableLocator : IExecutableLocator
         return null;
     }
 
-    private static string? FindAtExplicitPath(string executableName)
+    private static string? FindAtExplicitPath(string executableName, string[] windowsExtensions)
     {
         var explicitPath = PathUtility.GetFullPath(executableName);
         if (TryResolve(explicitPath) is { } resolved)
@@ -64,7 +73,7 @@ public sealed class ExecutableLocator : IExecutableLocator
             return resolved;
         }
 
-        if (!OperatingSystem.IsWindows())
+        if (windowsExtensions.Length == 0)
         {
             return null;
         }
@@ -72,12 +81,14 @@ public sealed class ExecutableLocator : IExecutableLocator
         // A Windows path may legitimately omit the extension, as "C:\tools\ffmpeg" does.
         var directory = Path.GetDirectoryName(explicitPath);
         var fileName = Path.GetFileName(explicitPath);
-        if (directory is null || fileName.Length == 0 || HasExecutableExtension(fileName))
+        if (directory is null
+            || fileName.Length == 0
+            || HasExecutableExtension(fileName, windowsExtensions))
         {
             return null;
         }
 
-        foreach (var extension in GetWindowsExtensions())
+        foreach (var extension in windowsExtensions)
         {
             if (TryResolve(Path.Combine(directory, fileName + extension)) is { } candidate)
             {
@@ -88,15 +99,12 @@ public sealed class ExecutableLocator : IExecutableLocator
         return null;
     }
 
-    private static string[] GetCandidateNames(string executableName)
+    private static string[] GetCandidateNames(string executableName, string[] windowsExtensions)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return [executableName];
-        }
-
-        // "ffmpeg.exe" must not become "ffmpeg.exe.exe".
-        if (HasExecutableExtension(executableName))
+        // "ffmpeg.exe" must not become "ffmpeg.exe.exe", and no other platform appends
+        // anything at all.
+        if (windowsExtensions.Length == 0
+            || HasExecutableExtension(executableName, windowsExtensions))
         {
             return [executableName];
         }
@@ -104,7 +112,7 @@ public sealed class ExecutableLocator : IExecutableLocator
         return
         [
             executableName,
-            .. GetWindowsExtensions().Select(extension => executableName + extension),
+            .. windowsExtensions.Select(extension => executableName + extension),
         ];
     }
 
@@ -123,11 +131,11 @@ public sealed class ExecutableLocator : IExecutableLocator
         return parsed.Length > 0 ? parsed : DefaultWindowsExtensions;
     }
 
-    private static bool HasExecutableExtension(string fileName)
+    private static bool HasExecutableExtension(string fileName, string[] windowsExtensions)
     {
         var extension = Path.GetExtension(fileName);
         return extension.Length > 0
-            && GetWindowsExtensions().Contains(extension, StringComparer.OrdinalIgnoreCase);
+            && windowsExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 
     private static string? TryResolve(string candidate)

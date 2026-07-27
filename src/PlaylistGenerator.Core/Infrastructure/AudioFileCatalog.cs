@@ -50,9 +50,9 @@ public sealed class AudioFileCatalog : IAudioFileCatalog
                 }
             }
 
-            var ordered = files.ToArray();
-            Array.Sort(ordered, StringComparer.OrdinalIgnoreCase);
-            return ordered;
+            // Sorting in place avoids copying the whole library into a second array.
+            files.Sort(StringComparer.OrdinalIgnoreCase);
+            return files;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

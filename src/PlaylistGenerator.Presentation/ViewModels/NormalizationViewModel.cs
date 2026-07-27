@@ -59,6 +59,9 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     private int _skippedFileCount;
 
+    [ObservableProperty]
+    private int _failedFileCount;
+
     public NormalizationViewModel(
         IAudioNormalizer audioNormalizer,
         IFilePickerService filePicker,
@@ -163,10 +166,12 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
 
             NormalizedFileCount = result.NormalizedFileCount;
             SkippedFileCount = result.SkippedFileCount;
-            _status.Report(
-                result.Stopped
-                    ? $"Normalization stopped. Completed {result.NormalizedFileCount} files."
-                    : $"Normalization complete. Created {result.NormalizedFileCount} files.");
+            FailedFileCount = result.FailedFileCount;
+            _status.Report(DescribeResult(result));
+
+            // Failures never stop the run, so the reasons would otherwise be lost. They go to
+            // the expander rather than the status line, which stays a single sentence.
+            _status.ReportDetails(DescribeFailures(result));
         }
         catch (OperationCanceledException)
         {
@@ -192,39 +197,64 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
     [RelayCommand(CanExecute = nameof(CanPause))]
     private void Pause()
     {
+        _status.Report("Normalization will pause before the next FFmpeg step.");
         _pauseController?.Pause();
         IsPaused = true;
-        _status.Report("Normalization will pause before the next FFmpeg step.");
     }
 
     [RelayCommand(CanExecute = nameof(CanResume))]
     private void Resume()
     {
+        // Reported before the run is released: releasing it can let the run finish on
+        // another thread, and that outcome message must be the one left on screen.
+        _status.Report("Normalization resumed.");
         _pauseController?.Resume();
         IsPaused = false;
-        _status.Report("Normalization resumed.");
     }
 
     [RelayCommand(CanExecute = nameof(CanStop))]
     private void Stop()
     {
+        // Same ordering as Resume: cancellation can complete the run immediately, so this
+        // transient message is published first rather than overwriting the final one.
+        _status.Report("Stopping normalization…");
+
         // Releasing the pause first lets a paused run observe cancellation immediately
         // instead of staying parked.
         _pauseController?.Resume();
         IsPaused = false;
         _cancellation?.Cancel();
-        _status.Report("Stopping normalization…");
     }
 
     private void ResetProgress()
     {
         NormalizedFileCount = 0;
         SkippedFileCount = 0;
+        FailedFileCount = 0;
         ProgressValue = 0;
         ProgressMaximum = 1;
         IsPaused = false;
         ProgressText = "Scanning for audio files…";
     }
+
+    /// <summary>Summarizes a finished run in one sentence.</summary>
+    private static string DescribeResult(NormalizationResult result)
+    {
+        var outcome = result.Stopped
+            ? $"Normalization stopped. Completed {result.NormalizedFileCount} files"
+            : $"Normalization complete. Created {result.NormalizedFileCount} files";
+        return result.FailedFileCount == 0
+            ? $"{outcome}."
+            : $"{outcome}, and {result.FailedFileCount} failed.";
+    }
+
+    /// <summary>Renders one line per failure, or nothing when the run had none.</summary>
+    private static string DescribeFailures(NormalizationResult result) =>
+        result.FailedFileCount == 0
+            ? string.Empty
+            : string.Join(
+                Environment.NewLine,
+                result.Failures.Select(failure => $"{failure.SourcePath}: {failure.Reason}"));
 
     private void UpdateProgress(NormalizationProgress progress)
     {
@@ -233,6 +263,7 @@ public sealed partial class NormalizationViewModel : ObservableObject, IDisposab
         ProgressValue = progress.CompletedFileCount;
         NormalizedFileCount = progress.NormalizedFileCount;
         SkippedFileCount = progress.SkippedFileCount;
+        FailedFileCount = progress.FailedFileCount;
         ProgressText = string.Format(
             CultureInfo.CurrentCulture,
             "{0} / {1} files · {2} · {3}",

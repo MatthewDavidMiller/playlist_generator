@@ -98,4 +98,40 @@ public sealed class AudioFileCatalogTests
 
         Assert.Contains("does not exist", exception.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ReportsATreeItCannotRead()
+    {
+        // Permission bits are a Unix concept, and root ignores them.
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Unix file permissions are required.");
+            return;
+        }
+
+        Assert.SkipWhen(
+            Environment.GetEnvironmentVariable("USER") == "root",
+            "Root bypasses the permission bits this test relies on.");
+
+        using var temporary = new TemporaryDirectory();
+        var source = temporary.CreateDirectory("music");
+        temporary.CreateFile("music/locked/one.mp3");
+        var locked = temporary.GetPath("music/locked");
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+
+        try
+        {
+            var exception = Assert.Throws<PlaylistIOException>(
+                () => new AudioFileCatalog().Scan(source));
+
+            // A partial listing would silently drop tracks from the playlist.
+            Assert.Contains("Unable to scan", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.SetUnixFileMode(
+                locked,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
 }

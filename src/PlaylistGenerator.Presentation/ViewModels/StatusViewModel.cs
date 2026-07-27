@@ -27,6 +27,12 @@ public sealed partial class StatusViewModel : ObservableObject
     /// <summary>Reports progress, leaving any existing diagnostics in place.</summary>
     public void Report(string message) => Message = message;
 
+    /// <summary>
+    /// Replaces the expandable detail without touching the status line, for an operation that
+    /// succeeded overall but has per-item detail worth keeping.
+    /// </summary>
+    public void ReportDetails(string details) => ErrorDetails = details;
+
     /// <summary>Announces a new operation and clears diagnostics from the previous one.</summary>
     public void BeginOperation(string message)
     {

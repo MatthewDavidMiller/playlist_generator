@@ -14,6 +14,9 @@ public sealed class FakeAudioNormalizer : IAudioNormalizer
 
     public NormalizationRequest? Request { get; private set; }
 
+    /// <summary>Failures the default summary reports.</summary>
+    public IReadOnlyList<NormalizationFailure> Failures { get; set; } = [];
+
     public Func<
         NormalizationRequest,
         IProgress<NormalizationProgress>?,
@@ -31,11 +34,11 @@ public sealed class FakeAudioNormalizer : IAudioNormalizer
         Request = request;
         return Handler?.Invoke(request, progress, pauseSignal, cancellationToken)
             ?? Task.FromResult(
-                new NormalizationResult(
+                NormalizationResults.Create(
                     request.SourceDirectory,
                     request.OutputDirectory,
                     NormalizedFileCount,
                     SkippedFileCount,
-                    false));
+                    Failures));
     }
 }

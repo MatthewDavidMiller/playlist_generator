@@ -103,6 +103,32 @@ public sealed class ExecutableLocatorTests
     }
 
     [Fact]
+    public void ReturnsNullWhenNoSearchPathEntryHoldsTheCommand()
+    {
+        using var temporary = new TemporaryDirectory();
+        var first = temporary.CreateDirectory("first");
+        var second = temporary.CreateDirectory("second");
+        temporary.CreateExecutable("second/some-other-tool");
+        using var searchPath = new EnvironmentVariableScope(
+            "PATH",
+            string.Join(Path.PathSeparator, first, second));
+
+        Assert.Null(new ExecutableLocator().Find("pg-absent-tool"));
+    }
+
+    [Fact]
+    public void DoesNotResolveADirectoryThatSharesTheCommandName()
+    {
+        using var temporary = new TemporaryDirectory();
+        var searchDirectory = temporary.CreateDirectory("bin");
+        temporary.CreateDirectory("bin/pg-test-tool");
+        using var searchPath = new EnvironmentVariableScope("PATH", searchDirectory);
+
+        // A directory is traversable, not runnable, so it must not satisfy the lookup.
+        Assert.Null(new ExecutableLocator().Find("pg-test-tool"));
+    }
+
+    [Fact]
     public void RejectsABlankExecutableName()
     {
         var locator = new ExecutableLocator();

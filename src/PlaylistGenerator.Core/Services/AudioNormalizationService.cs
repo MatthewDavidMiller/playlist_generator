@@ -9,35 +9,77 @@ namespace PlaylistGenerator.Core.Services;
 /// Produces loudness-normalized Opus copies of an audio library using two FFmpeg passes.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Source files are never opened for writing. Each output is encoded to a temporary file and
 /// moved into place, so an interrupted run leaves no partial <c>.opus</c> file behind and the
 /// next run resumes from what already completed.
+/// </para>
+/// <para>
+/// Several files are encoded at once. Both FFmpeg passes are processor-bound and each one
+/// works on a single file, so a sequential run leaves most of a multi-core machine idle. The
+/// planner guarantees distinct destinations, which is what makes concurrent workers safe.
+/// </para>
+/// <para>
+/// A file that cannot be normalized is recorded in the result and the run continues. Losing
+/// hours of completed work to one unreadable file would make a large library impractical to
+/// process.
+/// </para>
 /// </remarks>
 public sealed class AudioNormalizationService : IAudioNormalizer
 {
     /// <summary>Upper bound on FFmpeg diagnostics quoted into an error message.</summary>
     private const int MaximumDiagnosticsLength = 4_000;
 
+    /// <summary>
+    /// Ceiling applied to the default worker count. FFmpeg uses several threads of its own and
+    /// both passes also read from disk, so more workers than this stop paying for themselves
+    /// and start competing for the same drive.
+    /// </summary>
+    private const int DefaultParallelismCeiling = 8;
+
     private readonly IAudioFileCatalog _catalog;
     private readonly IExecutableLocator _executableLocator;
     private readonly IProcessRunner _processRunner;
+    private readonly int _maxDegreeOfParallelism;
 
+    /// <summary>Creates a service that sizes its worker count for the current machine.</summary>
     public AudioNormalizationService(
         IAudioFileCatalog catalog,
         IExecutableLocator executableLocator,
         IProcessRunner processRunner)
+        : this(catalog, executableLocator, processRunner, DefaultMaxDegreeOfParallelism)
+    {
+    }
+
+    /// <summary>
+    /// Creates a service that encodes at most <paramref name="maxDegreeOfParallelism"/> files
+    /// at once. Pass <c>1</c> for a strictly sequential run.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The worker count is below one.</exception>
+    public AudioNormalizationService(
+        IAudioFileCatalog catalog,
+        IExecutableLocator executableLocator,
+        IProcessRunner processRunner,
+        int maxDegreeOfParallelism)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(executableLocator);
         ArgumentNullException.ThrowIfNull(processRunner);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxDegreeOfParallelism, 1);
+
         _catalog = catalog;
         _executableLocator = executableLocator;
         _processRunner = processRunner;
+        _maxDegreeOfParallelism = maxDegreeOfParallelism;
     }
+
+    /// <summary>Gets the worker count used when a caller does not choose one.</summary>
+    public static int DefaultMaxDegreeOfParallelism { get; } =
+        Math.Clamp(Environment.ProcessorCount, 1, DefaultParallelismCeiling);
 
     /// <inheritdoc />
     /// <exception cref="PlaylistValidationException">The request cannot be normalized.</exception>
-    /// <exception cref="PlaylistIOException">FFmpeg or the filesystem failed.</exception>
+    /// <exception cref="PlaylistIOException">The library could not be read.</exception>
     public async Task<NormalizationResult> NormalizeAsync(
         NormalizationRequest request,
         IProgress<NormalizationProgress>? progress = null,
@@ -65,42 +107,97 @@ public sealed class AudioNormalizationService : IAudioNormalizer
         }
 
         var plan = NormalizationPlanner.Create(audioFiles, sourceDirectory, outputDirectory);
-        var reporter = new ProgressReporter(progress, plan.TotalFileCount);
+        var reporter = new NormalizationProgressReporter(progress, plan.TotalFileCount);
 
         foreach (var skippedPath in plan.SkippedSourcePaths)
         {
             reporter.ReportSkipped(skippedPath);
         }
 
-        var stopped = false;
-        foreach (var job in plan.Jobs)
-        {
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                await WaitWhilePausedAsync(pauseSignal, reporter, job.SourcePath, cancellationToken)
-                    .ConfigureAwait(false);
-
-                reporter.Report(job.SourcePath, NormalizationAction.Analyzing);
-                await NormalizeFileAsync(ffmpeg, job, pauseSignal, reporter, cancellationToken)
-                    .ConfigureAwait(false);
-
-                reporter.ReportCompleted(job.SourcePath);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                stopped = true;
-                reporter.Report(job.SourcePath, NormalizationAction.Stopped);
-                break;
-            }
-        }
+        var stopped = await RunJobsAsync(ffmpeg, plan, pauseSignal, reporter, cancellationToken)
+            .ConfigureAwait(false);
 
         return new NormalizationResult(
             sourceDirectory,
             outputDirectory,
             reporter.NormalizedCount,
             reporter.SkippedCount,
+            reporter.Failures,
             stopped);
+    }
+
+    /// <summary>Runs every planned job and reports whether cancellation ended the run.</summary>
+    private async Task<bool> RunJobsAsync(
+        string ffmpeg,
+        NormalizationPlan plan,
+        IPauseSignal? pauseSignal,
+        NormalizationProgressReporter reporter,
+        CancellationToken cancellationToken)
+    {
+        if (plan.Jobs.Count == 0)
+        {
+            // Nothing to schedule, but an already-canceled token still means a stopped run.
+            return cancellationToken.IsCancellationRequested;
+        }
+
+        var options = new ParallelOptions
+        {
+            // Never start more workers than there is work for them to do.
+            MaxDegreeOfParallelism = Math.Min(_maxDegreeOfParallelism, plan.Jobs.Count),
+            CancellationToken = cancellationToken,
+        };
+
+        try
+        {
+            await Parallel
+                .ForEachAsync(
+                    plan.Jobs,
+                    options,
+                    (job, token) => NormalizeJobAsync(ffmpeg, job, pauseSignal, reporter, token))
+                .ConfigureAwait(false);
+            return false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancellation reports the partial counts already gathered rather than throwing.
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Normalizes one file, turning an expected failure into a recorded one so the remaining
+    /// files still run.
+    /// </summary>
+    private async ValueTask NormalizeJobAsync(
+        string ffmpeg,
+        NormalizationJob job,
+        IPauseSignal? pauseSignal,
+        NormalizationProgressReporter reporter,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await WaitWhilePausedAsync(pauseSignal, reporter, job.SourcePath, cancellationToken)
+                .ConfigureAwait(false);
+
+            reporter.Report(job.SourcePath, NormalizationAction.Analyzing);
+            await NormalizeFileAsync(ffmpeg, job, pauseSignal, reporter, cancellationToken)
+                .ConfigureAwait(false);
+
+            reporter.ReportCompleted(job.SourcePath);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            reporter.Report(job.SourcePath, NormalizationAction.Stopped);
+
+            // Rethrowing keeps the remaining files from being scheduled.
+            throw;
+        }
+        catch (PlaylistGeneratorException exception)
+        {
+            reporter.ReportFailed(job.SourcePath, exception.Message);
+        }
     }
 
     /// <summary>Validates the request and returns the resolved FFmpeg path.</summary>
@@ -128,7 +225,7 @@ public sealed class AudioNormalizationService : IAudioNormalizer
         string ffmpeg,
         NormalizationJob job,
         IPauseSignal? pauseSignal,
-        ProgressReporter reporter,
+        NormalizationProgressReporter reporter,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(job.SourcePath))
@@ -160,9 +257,11 @@ public sealed class AudioNormalizationService : IAudioNormalizer
                 .ConfigureAwait(false);
             EnsureSuccess(analysis, $"FFmpeg failed to analyze loudness for '{job.SourcePath}'");
 
-            // FFmpeg writes the JSON summary to whichever stream is available.
+            // FFmpeg prints the JSON summary to standard error, but has used standard output
+            // across versions. Trying them in turn avoids joining two large logs into one.
             var stats = LoudnessJsonParser.Parse(
-                $"{analysis.StandardOutput}{Environment.NewLine}{analysis.StandardError}",
+                analysis.StandardError,
+                analysis.StandardOutput,
                 job.SourcePath);
 
             // A pause requested during analysis takes effect here, between the two passes,
@@ -208,7 +307,7 @@ public sealed class AudioNormalizationService : IAudioNormalizer
 
     private static async Task WaitWhilePausedAsync(
         IPauseSignal? pauseSignal,
-        ProgressReporter reporter,
+        NormalizationProgressReporter reporter,
         string sourcePath,
         CancellationToken cancellationToken)
     {
@@ -254,41 +353,5 @@ public sealed class AudioNormalizationService : IAudioNormalizer
 
         throw new PlaylistIOException(
             detail.Length == 0 ? $"{message}." : $"{message}: {detail}");
-    }
-
-    /// <summary>
-    /// Tracks run counters and publishes progress, keeping the counting rules in one place.
-    /// </summary>
-    private sealed class ProgressReporter(
-        IProgress<NormalizationProgress>? progress,
-        int totalFileCount)
-    {
-        public int NormalizedCount { get; private set; }
-
-        public int SkippedCount { get; private set; }
-
-        private int CompletedCount => NormalizedCount + SkippedCount;
-
-        public void ReportSkipped(string sourcePath)
-        {
-            SkippedCount++;
-            Report(sourcePath, NormalizationAction.Skipped);
-        }
-
-        public void ReportCompleted(string sourcePath)
-        {
-            NormalizedCount++;
-            Report(sourcePath, NormalizationAction.Completed);
-        }
-
-        public void Report(string sourcePath, NormalizationAction action) =>
-            progress?.Report(
-                new NormalizationProgress(
-                    totalFileCount,
-                    CompletedCount,
-                    NormalizedCount,
-                    SkippedCount,
-                    sourcePath,
-                    action));
     }
 }

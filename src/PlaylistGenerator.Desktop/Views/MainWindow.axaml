@@ -140,6 +140,8 @@
                   Text="{Binding Normalization.NormalizedFileCount, StringFormat='Normalized: {0}'}" />
               <TextBlock
                   Text="{Binding Normalization.SkippedFileCount, StringFormat='Skipped: {0}'}" />
+              <TextBlock
+                  Text="{Binding Normalization.FailedFileCount, StringFormat='Failed: {0}'}" />
 
               <StackPanel Margin="0,16,0,0" Orientation="Horizontal" Spacing="8">
                 <Button
