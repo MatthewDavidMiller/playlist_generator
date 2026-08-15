@@ -14,7 +14,7 @@ for package in "$@"; do
     case ${package} in
         linux-x64) target=x86_64-unknown-linux-gnu; suffix= ;;
         linux-arm64) target=aarch64-unknown-linux-gnu; suffix= ;;
-        windows-x64) target=x86_64-pc-windows-gnu; suffix=.exe ;;
+        windows-x64) target=x86_64-pc-windows-gnullvm; suffix=.exe ;;
         windows-arm64) target=aarch64-pc-windows-gnullvm; suffix=.exe ;;
         *) echo "Unsupported release package: ${package}" >&2; exit 2 ;;
     esac

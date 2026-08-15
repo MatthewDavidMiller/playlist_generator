@@ -17,9 +17,9 @@ fn is_link_like(entry: &DirEntry) -> bool {
 fn is_windows_reparse(path: &Path) -> bool {
     use std::os::windows::fs::MetadataExt;
     const REPARSE_POINT: u32 = 0x400;
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_attributes() & REPARSE_POINT != 0)
-        .unwrap_or(true)
+    fs::symlink_metadata(path).map_or(true, |metadata| {
+        metadata.file_attributes() & REPARSE_POINT != 0
+    })
 }
 
 #[cfg(not(windows))]

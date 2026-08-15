@@ -57,6 +57,7 @@ pub struct PlaylistGeneratorApp {
     activity: VecDeque<String>,
     control: Option<RunControl>,
     operation_thread: Option<JoinHandle<()>>,
+    painted: bool,
     tx: Sender<Message>,
     rx: Receiver<Message>,
 }
@@ -79,6 +80,7 @@ impl Default for PlaylistGeneratorApp {
             activity: VecDeque::new(),
             control: None,
             operation_thread: None,
+            painted: false,
             tx,
             rx,
         }
@@ -371,6 +373,13 @@ impl PlaylistGeneratorApp {
 impl eframe::App for PlaylistGeneratorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let context = ui.ctx().clone();
+        if !self.painted {
+            self.painted = true;
+            // eframe keeps the window hidden until the first frame has been
+            // painted, so this is the line that separates a window that never
+            // appeared from one that was never built.
+            note("first frame");
+        }
         self.receive();
         if self.busy {
             context.request_repaint_after(std::time::Duration::from_millis(50));
@@ -422,6 +431,60 @@ impl Drop for PlaylistGeneratorApp {
     }
 }
 
+/// The startup log, rewritten on every launch.
+///
+/// A message box only reaches the user when the process is still healthy enough
+/// to show one. A launch that is stopped before `main`, or that is killed inside
+/// a display driver, reports nothing at all, and the GUI subsystem has already
+/// thrown away standard error. The file records how far the launch got, so the
+/// difference between "never started", "died opening the window", and "reported
+/// an error" is visible after the fact.
+#[cfg(windows)]
+fn log_path() -> Option<PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA").map_or_else(std::env::temp_dir, PathBuf::from);
+    let directory = base.join("PlaylistGenerator");
+    std::fs::create_dir_all(&directory).ok()?;
+    Some(directory.join("startup.log"))
+}
+
+#[cfg(windows)]
+fn note(stage: &str) {
+    use std::io::Write as _;
+
+    let Some(path) = log_path() else { return };
+    let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    else {
+        return;
+    };
+    let _ = writeln!(file, "{stage}");
+    let _ = file.flush();
+}
+
+#[cfg(not(windows))]
+fn note(stage: &str) {
+    eprintln!("{stage}");
+}
+
+/// Starts a fresh log so the file always describes the launch being debugged.
+#[cfg(windows)]
+fn begin_log() {
+    let Some(path) = log_path() else { return };
+    let _ = std::fs::remove_file(path);
+    note(&format!(
+        "Playlist Generator {} starting",
+        env!("CARGO_PKG_VERSION")
+    ));
+    if let Ok(executable) = std::env::current_exe() {
+        note(&format!("executable {}", executable.display()));
+    }
+}
+
+#[cfg(not(windows))]
+fn begin_log() {}
+
 /// Presents a fatal error where the user can actually read it.
 ///
 /// The Windows binary is linked for the GUI subsystem and therefore has no
@@ -430,10 +493,14 @@ impl Drop for PlaylistGeneratorApp {
 /// the binary attached to the terminal it was started from.
 #[cfg(windows)]
 fn report_fatal(summary: &str, detail: &str) {
+    note(&format!("{summary} {detail}"));
+    let location = log_path().map_or_else(String::new, |path| {
+        format!("\n\nStartup log: {}", path.display())
+    });
     let _ = rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)
         .set_title("Playlist Generator")
-        .set_description(format!("{summary}\n\n{detail}"))
+        .set_description(format!("{summary}\n\n{detail}{location}"))
         .show();
 }
 
@@ -458,6 +525,7 @@ fn install_panic_reporter() {
 }
 
 pub fn run() -> eframe::Result<()> {
+    begin_log();
     install_panic_reporter();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -467,16 +535,21 @@ pub fn run() -> eframe::Result<()> {
             .with_clamp_size_to_monitor_size(true),
         ..Default::default()
     };
+    note("opening the window");
     let result = eframe::run_native(
         "Playlist Generator",
         options,
-        Box::new(|_context| Ok(Box::<PlaylistGeneratorApp>::default())),
+        Box::new(|_context| {
+            note("window open");
+            Ok(Box::<PlaylistGeneratorApp>::default())
+        }),
     );
-    if let Err(error) = &result {
-        report_fatal(
+    match &result {
+        Ok(()) => note("closed"),
+        Err(error) => report_fatal(
             "Playlist Generator could not open its window.",
             &error.to_string(),
-        );
+        ),
     }
     result
 }
@@ -491,7 +564,7 @@ mod tests {
         let mut harness = Harness::new_eframe(|_| PlaylistGeneratorApp::default());
         harness.get_by_label("About").click();
         harness.run();
-        assert!(harness.query_by_label("Version 0.9.2").is_some());
+        assert!(harness.query_by_label("Version 0.9.3").is_some());
         assert!(harness.query_by_label("Project repository").is_some());
         assert!(harness.query_by_label(REPOSITORY).is_some());
     }

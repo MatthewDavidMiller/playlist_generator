@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 0.9.2 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 0.9.3 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-gui ─┐
@@ -24,22 +24,39 @@ playlist-generator ─────┘
 ### Windows desktop binary
 
 The binary is linked for the Windows GUI subsystem, so it has no console and
-nothing it writes to standard error is ever seen. Two rules follow.
+nothing it writes to standard error is ever seen. Three rules follow.
 
-Every fatal path must reach a message box. `run` reports a failed
-`eframe::run_native`, and an installed panic hook reports the first panic from
-any thread. Without this a startup failure is indistinguishable from the
-program never having been launched, which is how 0.9.0 and 0.9.1 shipped.
+Both Windows packages link with llvm-mingw, through the
+`x86_64-pc-windows-gnullvm` and `aarch64-pc-windows-gnullvm` targets. The GNU
+binutils Debian ships for `x86_64-pc-windows-gnu` are 2.40, which drops import
+descriptors when one DLL is imported through several of them. The desktop
+binary imported kernel32 from four descriptors; three were discarded and the
+eighteen thunks they owned kept the file-relative address of their own import
+name, which the loader never overwrites. The first call through one,
+`GetModuleHandleA`, jumped to 0x7265c0, so 0.9.0 through 0.9.2 died with
+0xC0000005 before reaching `main` — no window, no message box, and a process
+too short-lived to see. The CLI, which imports far less, was unaffected.
+Binutils 2.44 and LLD both emit the table correctly. `verify-artifact.sh` now
+fails the release unless every import address table slot belongs to a
+descriptor.
+
+Every fatal path must reach a message box, and every launch must leave
+evidence. `run` reports a failed `eframe::run_native`, an installed panic hook
+reports the first panic from any thread, and both are also written to
+`%LOCALAPPDATA%\PlaylistGenerator\startup.log`, which each launch rewrites with
+the stage it reached. A crash below our own code — the failure above — reaches
+none of the in-process reporting, and the absent log is what says so.
 
 `build.rs` compiles `windows/playlist-generator-gui.manifest` and a
 `VERSIONINFO` block with `windres` and links the result into the executable
 only. Without a resource section Windows treats the binary as a pre-Vista
 application: compatibility and UAC virtualisation shims apply, DPI awareness is
 resolved late, and Explorer, SmartScreen, and endpoint protection see an
-unnamed, unversioned executable. `windres` comes from the MinGW binutils that
-already provide the cross linkers, so this adds no build dependency; set
+unnamed, unversioned executable. `windres` comes from the MinGW toolchain that
+already provides the cross linkers, so this adds no build dependency; set
 `WINDRES` to override the detected one. `scripts/verify-artifact.sh` fails the
-release if `.rsrc`, the manifest, or the version resource is missing.
+release if `.rsrc`, the manifest, or the version resource is missing. LLD sets
+the subsystem and OS versions to 6.00 on its own, so no linker argument does.
 
 All first-party crates inherit `unsafe_code = "forbid"`, warning denial, and
 strict Clippy policy. Release panic unwinding remains enabled so temporary-file

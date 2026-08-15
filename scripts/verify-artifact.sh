@@ -34,9 +34,30 @@ case ${package} in
         # legacy executable.
         gui=${stage}/bin/playlist-generator-gui.exe
         llvm-readobj --sections "${gui}" | grep -F 'Name: .rsrc'
-        strings -a "${gui}" | grep -qF 'requestedExecutionLevel'
-        strings -a "${gui}" | grep -qF '{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}'
-        strings -a -el "${gui}" | grep -qF 'playlist-generator-gui.exe'
+        # Not `grep -q`: it exits on the first match, `strings` takes SIGPIPE,
+        # and `pipefail` fails the release with 141 depending on where in the
+        # binary the match lands.
+        strings -a "${gui}" | grep -F 'requestedExecutionLevel' >/dev/null
+        strings -a "${gui}" | grep -F '{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}' >/dev/null
+        strings -a -el "${gui}" | grep -F 'playlist-generator-gui.exe' >/dev/null
+        # Every import address table slot must belong to a descriptor: one slot
+        # per imported symbol, plus one null terminator per descriptor. Binutils
+        # 2.40 dropped descriptors when a DLL was imported through more than one
+        # of them and left the orphaned thunks holding the address of their own
+        # import name, which the loader never overwrites. The first call through
+        # one jumped into the import table, and 0.9.0 through 0.9.2 died with
+        # 0xC0000005 before reaching `main`.
+        for binary in "${stage}"/bin/*.exe; do
+            iat=$(llvm-readobj --file-headers "${binary}" | sed -n 's/.*IATSize: \(0x[0-9A-Fa-f]*\)$/\1/p')
+            imports=$(llvm-readobj --coff-imports "${binary}")
+            descriptors=$(grep -c '^Import {' <<<"${imports}" || true)
+            symbols=$(grep -c '^  Symbol: ' <<<"${imports}" || true)
+            if (( iat / 8 != symbols + descriptors )); then
+                echo "Unresolvable imports in ${binary}: $((iat / 8)) address table" \
+                     "slots for ${symbols} symbols in ${descriptors} descriptors" >&2
+                exit 1
+            fi
+        done
         for binary in "${stage}"/bin/*.exe; do
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE'
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_NX_COMPAT'

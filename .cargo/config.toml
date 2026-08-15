@@ -1,14 +1,21 @@
 [build]
 rustflags = ["-C", "link-arg=-Wl,-z,relro,-z,now"]
 
-[target.x86_64-pc-windows-gnu]
-linker = "/usr/bin/x86_64-w64-mingw32-gcc"
-# MinGW defaults the image to subsystem 5.02, which marks the binary as a
-# pre-Vista application; 6.00 matches the manifest's supported-OS list.
+# Both Windows targets link with llvm-mingw. The GNU binutils that Debian ships
+# for `x86_64-pc-windows-gnu` are 2.40, which drops import descriptors when one
+# DLL is imported through several of them: the desktop binary imported kernel32
+# from four descriptors, three were discarded, and the eighteen thunks they
+# owned were left holding the file-relative address of their own import name.
+# The first call through one, `GetModuleHandleA`, jumped to 0x7265c0 and 0.9.0
+# through 0.9.2 died with 0xC0000005 before reaching `main`. LLD emits the table
+# correctly, already builds the ARM64 package, and sets the subsystem and OS
+# versions to 6.00 without being asked.
+[target.x86_64-pc-windows-gnullvm]
+linker = "x86_64-w64-mingw32-clang"
 rustflags = [
+  "-C", "target-feature=+crt-static",
+  "-C", "link-arg=-static",
   "-C", "link-arg=-Wl,--dynamicbase,--nxcompat,--high-entropy-va",
-  "-C", "link-arg=-Wl,--major-subsystem-version,6,--minor-subsystem-version,0",
-  "-C", "link-arg=-Wl,--major-os-version,6,--minor-os-version,0",
 ]
 
 [target.aarch64-unknown-linux-gnu]

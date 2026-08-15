@@ -13,13 +13,13 @@ RUN apt-get update \
  && apt-get install --yes --no-install-recommends \
     binutils build-essential ca-certificates curl file gcc-aarch64-linux-gnu \
     git libdbus-1-dev libgl1-mesa-dev libwayland-dev libx11-dev libxkbcommon-dev \
-    gcc-mingw-w64-x86-64 pkg-config python3 shellcheck xz-utils \
+    pkg-config python3 shellcheck xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs \
     | sh -s -- -y --profile minimal --default-toolchain "${RUST_VERSION}" \
  && rustup component add clippy rustfmt \
- && rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnu aarch64-pc-windows-gnullvm
+ && rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnullvm aarch64-pc-windows-gnullvm
 
 RUN curl --proto '=https' --tlsv1.2 -fsSL \
       "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" \

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(git rev-parse --show-toplevel)
-image=${PLAYLIST_GENERATOR_DEV_IMAGE:-playlist-generator-dev:0.9.2}
+image=${PLAYLIST_GENERATOR_DEV_IMAGE:-playlist-generator-dev:0.9.3}
 mkdir -p "${repo_root}/.cache/cargo" "${repo_root}/.cache/target"
 
 if [[ -n ${CONTAINER_ENGINE:-} ]]; then

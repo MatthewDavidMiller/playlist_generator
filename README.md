@@ -71,6 +71,15 @@ size only shrinks when needed to fit the monitor work area. About contains the
 build version, project link, repository license, and generated third-party
 notices.
 
+On Windows the desktop binary is linked for the GUI subsystem and has no
+console, so every launch rewrites
+`%LOCALAPPDATA%\PlaylistGenerator\startup.log` with how far it got: the version
+and executable path, `opening the window`, `window open` once the window and
+renderer exist, and `first frame` once something has been painted, which is
+also when the window stops being hidden. A launch that fails reports the error
+in a message box and writes it there too. A missing file means the process
+never reached its own code.
+
 ## Build from source
 
 Development is container-first and pinned to Rust 1.97.1. On a Linux host with
