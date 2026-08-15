@@ -135,12 +135,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
 name = "android-activity"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -936,14 +930,12 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "pollster 1.0.1",
  "profiling",
  "raw-window-handle",
  "static_assertions",
  "wasm-bindgen",
  "web-sys",
  "web-time",
- "wgpu",
  "windows-sys 0.61.2",
  "winit",
 ]
@@ -1454,19 +1446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpu-allocator"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51255ea7cfaadb6c5f1528d43e92a82acb2b96c43365989a28b2d44ee38f8795"
-dependencies = [
- "hashbrown 0.16.1",
- "log",
- "presser",
- "thiserror 2.0.20",
- "windows",
-]
-
-[[package]]
 name = "guillotiere"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1505,8 +1484,6 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
 dependencies = [
- "allocator-api2",
- "equivalent",
  "foldhash",
 ]
 
@@ -2287,15 +2264,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ordered-float"
-version = "5.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2447,7 +2415,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "playlist-generator"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "clap",
  "playlist-generator-core",
@@ -2458,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-core"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "atomic-write-file",
  "command-group",
@@ -2472,15 +2440,14 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-gui"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "eframe",
  "egui",
  "egui_kittest",
  "playlist-generator-core",
- "pollster 0.4.0",
+ "pollster",
  "rfd",
- "wgpu",
 ]
 
 [[package]]
@@ -2517,12 +2484,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
 
 [[package]]
-name = "pollster"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
-
-[[package]]
 name = "polycool"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2545,12 +2506,6 @@ checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
 dependencies = [
  "portable-atomic",
 ]
-
-[[package]]
-name = "presser"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
 
 [[package]]
 name = "proc-macro-crate"
@@ -2634,12 +2589,6 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "range-alloc"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "raw-window-handle"
@@ -2727,7 +2676,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
  "percent-encoding",
- "pollster 0.4.0",
+ "pollster",
  "raw-window-handle",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -3624,33 +3573,22 @@ version = "30.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf765132d8d5f50e192e7880464890c13f4e7457aafe8e5466e8174586e9f101"
 dependencies = [
- "arrayvec",
- "bit-set",
  "bitflags 2.13.1",
- "bytemuck",
  "cfg-if",
  "cfg_aliases",
- "gpu-allocator",
  "hashbrown 0.17.1",
  "libloading",
  "log",
  "naga",
  "naga-types",
- "once_cell",
- "ordered-float",
- "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
- "profiling",
- "range-alloc",
  "raw-window-handle",
  "renderdoc-sys",
  "static_assertions",
  "thiserror 2.0.20",
  "wgpu-naga-bridge",
  "wgpu-types",
- "windows",
- "windows-core",
 ]
 
 [[package]]

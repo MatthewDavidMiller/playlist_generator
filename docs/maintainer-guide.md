@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 0.9.1 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 0.9.2 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-gui ─┐
@@ -19,9 +19,27 @@ playlist-generator ─────┘
 - `playlist-generator` is the `clap` CLI and its human/NDJSON presenters.
 - `playlist-generator-gui` owns the `eframe` shell and asynchronous `rfd`
   pickers. Keep interaction state here and operating-system-independent rules
-  in core. The native renderer is `wgpu`/Direct3D on Windows and Glow on Linux;
-  keep the renderer features target-specific so Windows does not depend on the
-  system OpenGL implementation.
+  in core. The native renderer is Glow on every target.
+
+### Windows desktop binary
+
+The binary is linked for the Windows GUI subsystem, so it has no console and
+nothing it writes to standard error is ever seen. Two rules follow.
+
+Every fatal path must reach a message box. `run` reports a failed
+`eframe::run_native`, and an installed panic hook reports the first panic from
+any thread. Without this a startup failure is indistinguishable from the
+program never having been launched, which is how 0.9.0 and 0.9.1 shipped.
+
+`build.rs` compiles `windows/playlist-generator-gui.manifest` and a
+`VERSIONINFO` block with `windres` and links the result into the executable
+only. Without a resource section Windows treats the binary as a pre-Vista
+application: compatibility and UAC virtualisation shims apply, DPI awareness is
+resolved late, and Explorer, SmartScreen, and endpoint protection see an
+unnamed, unversioned executable. `windres` comes from the MinGW binutils that
+already provide the cross linkers, so this adds no build dependency; set
+`WINDRES` to override the detected one. `scripts/verify-artifact.sh` fails the
+release if `.rsrc`, the manifest, or the version resource is missing.
 
 All first-party crates inherit `unsafe_code = "forbid"`, warning denial, and
 strict Clippy policy. Release panic unwinding remains enabled so temporary-file

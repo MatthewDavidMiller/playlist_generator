@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
+use std::panic;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
@@ -11,6 +13,7 @@ use playlist_generator_core::{
     default_jobs, generate, normalize,
 };
 
+const REPOSITORY: &str = "https://github.com/MatthewDavidMiller/playlist_generator";
 const MAX_LOG_ENTRIES: usize = 500;
 const FORM_WIDTH: f32 = 640.0;
 const NARROW_BREAKPOINT: f32 = 620.0;
@@ -347,10 +350,15 @@ impl PlaylistGeneratorApp {
     fn about_page(ui: &mut egui::Ui) {
         ui.heading("Playlist Generator");
         ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
-        ui.hyperlink_to(
-            "Project repository",
-            "https://github.com/MatthewDavidMiller/playlist_generator",
-        );
+        // Opening a browser would cost `eframe/links` and the twenty-odd crates
+        // behind it, so the repository is offered as copyable text instead.
+        ui.horizontal(|ui| {
+            ui.label("Project repository");
+            if ui.button("Copy").clicked() {
+                ui.ctx().copy_text(REPOSITORY.to_owned());
+            }
+        });
+        ui.label(REPOSITORY);
         ui.separator();
         ui.heading("License");
         ui.label(include_str!("../../../LICENSE"));
@@ -414,23 +422,44 @@ impl Drop for PlaylistGeneratorApp {
     }
 }
 
-pub fn fit_initial_size(work_area: egui::Vec2) -> egui::Vec2 {
-    egui::vec2(960.0_f32.min(work_area.x), 640.0_f32.min(work_area.y))
-}
-
+/// Presents a fatal error where the user can actually read it.
+///
+/// The Windows binary is linked for the GUI subsystem and therefore has no
+/// console, so a returned error or a panic leaves nothing behind: no window, no
+/// message, and no exit status the user ever sees. Every other platform keeps
+/// the binary attached to the terminal it was started from.
 #[cfg(windows)]
-fn native_renderer() -> eframe::Renderer {
-    eframe::Renderer::Wgpu
+fn report_fatal(summary: &str, detail: &str) {
+    let _ = rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Playlist Generator")
+        .set_description(format!("{summary}\n\n{detail}"))
+        .show();
 }
 
 #[cfg(not(windows))]
-fn native_renderer() -> eframe::Renderer {
-    eframe::Renderer::Glow
+fn report_fatal(summary: &str, detail: &str) {
+    eprintln!("{summary}\n\n{detail}");
+}
+
+/// Reports the first panic from any thread, then defers to the default hook.
+fn install_panic_reporter() {
+    static REPORTED: AtomicBool = AtomicBool::new(false);
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        if !REPORTED.swap(true, Ordering::Relaxed) {
+            report_fatal(
+                "Playlist Generator stopped unexpectedly.",
+                &info.to_string(),
+            );
+        }
+    }));
 }
 
 pub fn run() -> eframe::Result<()> {
+    install_panic_reporter();
     let options = eframe::NativeOptions {
-        renderer: native_renderer(),
         viewport: egui::ViewportBuilder::default()
             .with_title("Playlist Generator")
             .with_inner_size([960.0, 640.0])
@@ -438,39 +467,32 @@ pub fn run() -> eframe::Result<()> {
             .with_clamp_size_to_monitor_size(true),
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "Playlist Generator",
         options,
         Box::new(|_context| Ok(Box::<PlaylistGeneratorApp>::default())),
-    )
+    );
+    if let Err(error) = &result {
+        report_fatal(
+            "Playlist Generator could not open its window.",
+            &error.to_string(),
+        );
+    }
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use egui_kittest::{Harness, kittest::Queryable as _};
-    #[test]
-    fn initial_size_only_shrinks_to_work_area() {
-        assert_eq!(
-            fit_initial_size(egui::vec2(800.0, 500.0)),
-            egui::vec2(800.0, 500.0)
-        );
-        assert_eq!(
-            fit_initial_size(egui::vec2(1200.0, 900.0)),
-            egui::vec2(960.0, 640.0)
-        );
-        assert_eq!(
-            fit_initial_size(egui::vec2(300.0, 200.0)),
-            egui::vec2(300.0, 200.0)
-        );
-    }
 
     #[test]
     fn navigation_and_about_content_are_accessible() {
         let mut harness = Harness::new_eframe(|_| PlaylistGeneratorApp::default());
         harness.get_by_label("About").click();
         harness.run();
-        assert!(harness.query_by_label("Version 0.9.1").is_some());
+        assert!(harness.query_by_label("Version 0.9.2").is_some());
         assert!(harness.query_by_label("Project repository").is_some());
+        assert!(harness.query_by_label(REPOSITORY).is_some());
     }
 }

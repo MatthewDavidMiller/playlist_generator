@@ -29,6 +29,14 @@ case ${package} in
         llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F "Machine: ${expected_machine}"
         llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_CUI'
         llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_GUI'
+        # The GUI binary has no console, so it must carry the application
+        # manifest and version resource that keep Windows from treating it as a
+        # legacy executable.
+        gui=${stage}/bin/playlist-generator-gui.exe
+        llvm-readobj --sections "${gui}" | grep -F 'Name: .rsrc'
+        strings -a "${gui}" | grep -qF 'requestedExecutionLevel'
+        strings -a "${gui}" | grep -qF '{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}'
+        strings -a -el "${gui}" | grep -qF 'playlist-generator-gui.exe'
         for binary in "${stage}"/bin/*.exe; do
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_DYNAMIC_BASE'
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_NX_COMPAT'

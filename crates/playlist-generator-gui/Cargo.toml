@@ -4,20 +4,17 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+build = "build.rs"
 
 [dependencies]
 eframe.workspace = true
 egui.workspace = true
-playlist-generator-core = { version = "=0.9.1", path = "../playlist-generator-core" }
+playlist-generator-core = { version = "=0.9.2", path = "../playlist-generator-core" }
 pollster.workspace = true
 rfd.workspace = true
 
-[target.'cfg(windows)'.dependencies]
-eframe = { workspace = true, features = ["wgpu_no_default_features"] }
-wgpu = { workspace = true, features = ["dx12"] }
-
 [target.'cfg(not(windows))'.dependencies]
-eframe = { workspace = true, features = ["glow", "wayland", "x11"] }
+eframe = { workspace = true, features = ["wayland", "x11"] }
 rfd = { workspace = true, features = ["xdg-portal", "wayland"] }
 
 [dev-dependencies]

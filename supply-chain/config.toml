@@ -48,10 +48,6 @@ criteria = "safe-to-deploy"
 version = "0.8.12"
 criteria = "safe-to-deploy"
 
-[[exemptions.allocator-api2]]
-version = "0.2.21"
-criteria = "safe-to-deploy"
-
 [[exemptions.android-activity]]
 version = "0.6.1"
 criteria = "safe-to-deploy"
@@ -560,10 +556,6 @@ criteria = "safe-to-deploy"
 version = "0.6.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.gpu-allocator]]
-version = "0.28.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.guillotiere]]
 version = "0.7.0"
 criteria = "safe-to-deploy"
@@ -892,10 +884,6 @@ criteria = "safe-to-run"
 version = "0.3.55"
 criteria = "safe-to-deploy"
 
-[[exemptions.ordered-float]]
-version = "5.3.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.ordered-stream]]
 version = "0.2.0"
 criteria = "safe-to-deploy"
@@ -972,10 +960,6 @@ criteria = "safe-to-deploy"
 version = "0.4.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.pollster]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.polycool]]
 version = "0.4.0"
 criteria = "safe-to-deploy"
@@ -986,10 +970,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.portable-atomic-util]]
 version = "0.2.7"
-criteria = "safe-to-deploy"
-
-[[exemptions.presser]]
-version = "0.3.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.proc-macro-crate]]
@@ -1034,10 +1014,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.rand_core]]
 version = "0.10.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.range-alloc]]
-version = "0.1.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.raw-window-handle]]

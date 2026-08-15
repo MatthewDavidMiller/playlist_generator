@@ -3,7 +3,13 @@ rustflags = ["-C", "link-arg=-Wl,-z,relro,-z,now"]
 
 [target.x86_64-pc-windows-gnu]
 linker = "/usr/bin/x86_64-w64-mingw32-gcc"
-rustflags = ["-C", "link-arg=-Wl,--dynamicbase,--nxcompat,--high-entropy-va"]
+# MinGW defaults the image to subsystem 5.02, which marks the binary as a
+# pre-Vista application; 6.00 matches the manifest's supported-OS list.
+rustflags = [
+  "-C", "link-arg=-Wl,--dynamicbase,--nxcompat,--high-entropy-va",
+  "-C", "link-arg=-Wl,--major-subsystem-version,6,--minor-subsystem-version,0",
+  "-C", "link-arg=-Wl,--major-os-version,6,--minor-os-version,0",
+]
 
 [target.aarch64-unknown-linux-gnu]
 linker = "/usr/bin/aarch64-linux-gnu-gcc"
