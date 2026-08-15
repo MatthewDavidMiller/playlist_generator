@@ -6006,7 +6006,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 License: MIT License
-Used by: playlist-generator 0.9.3, playlist-generator-core 0.9.3, playlist-generator-gui 0.9.3, dpi 0.1.2
+Used by: playlist-generator 0.9.4, playlist-generator-core 0.9.4, playlist-generator-gui 0.9.4, dpi 0.1.2
 
 MIT License
 

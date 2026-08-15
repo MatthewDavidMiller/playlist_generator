@@ -16,8 +16,9 @@ remote publishing workflow is used.
   metadata, excluding cover art, and leaving every source untouched.
 - Resumable output, collision detection, up to 32 fixed workers, per-file
   failure continuation, pause/resume, and whole-process-tree cancellation.
-- An adaptive `egui` desktop interface with Create Playlist, Normalize,
-  Activity, and About pages, native asynchronous pickers, and zoom controls.
+- An adaptive `egui` desktop interface with Create Playlist, Normalize Volume,
+  Activity, and About pages, native asynchronous pickers, an explanation under
+  every control, and zoom controls.
 - Human-readable CLI output or stable newline-delimited JSON for automation.
 
 FFmpeg is the only runtime prerequisite for normalization. Playlist creation
@@ -60,16 +61,26 @@ local paths, review them before sharing.
 
 ## Desktop usage
 
-The desktop application coordinates one operation at a time. Forms remain
-centered and scrollable, and reflow below the narrow breakpoint. Normalization
-progress and its bounded diagnostic history are on Activity, together with
-Pause, Resume, and Stop. Closing the window stops the FFmpeg process group and
-removes incomplete temporary output.
+The desktop application coordinates one operation at a time. Each control is
+labelled in plain language and explained underneath, and the two starting pages
+name what they read, what they write, and what they leave alone.
+
+Every page is one centered, scrollable column that stops widening at 620 points,
+so a maximized window and a half-screen window read the same. Widths are
+measured from that column rather than from the window, which is what keeps the
+layout correct under Windows display scaling: at 150% or 200% the same window
+reports fewer points, and the browse buttons move under their text boxes only
+when the column itself is genuinely too tight. Zoom in the status bar rescales
+everything on top of the display setting, which its tooltip reports.
+
+Starting a run opens Activity, which holds progress, the counts, the bounded
+message history, and Pause, Resume, and Stop. Closing the window stops the
+FFmpeg process group and removes incomplete temporary output.
 
 The preferred first size is 960×640 points with a 420×320 minimum. The initial
 size only shrinks when needed to fit the monitor work area. About contains the
-build version, project link, repository license, and generated third-party
-notices.
+build version, project link, and, folded away because they are thousands of
+lines, the repository license and the generated third-party notices.
 
 On Windows the desktop binary is linked for the GUI subsystem and has no
 console, so every launch rewrites

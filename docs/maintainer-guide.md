@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 0.9.3 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 0.9.4 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-gui ─┐
@@ -20,6 +20,15 @@ playlist-generator ─────┘
 - `playlist-generator-gui` owns the `eframe` shell and asynchronous `rfd`
   pickers. Keep interaction state here and operating-system-independent rules
   in core. The native renderer is Glow on every target.
+
+Lay pages out inside `form`, which centres one column, caps it at `FORM_WIDTH`,
+and reports whether it fell under `NARROW_BREAKPOINT`. Take every width from
+that column and never from the window, and give a row that fills its width a
+height of its own: a text box told to fill a row pushes the button beside it out
+of the window, and a `right_to_left` row with no allocated height centres itself
+down the whole scroll area. Both were visible at every window size before 0.9.4,
+and worst under Windows display scaling, which leaves the window fewer points to
+work with.
 
 ### Windows desktop binary
 

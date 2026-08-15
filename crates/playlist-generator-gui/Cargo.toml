@@ -9,7 +9,7 @@ build = "build.rs"
 [dependencies]
 eframe.workspace = true
 egui.workspace = true
-playlist-generator-core = { version = "=0.9.3", path = "../playlist-generator-core" }
+playlist-generator-core = { version = "=0.9.4", path = "../playlist-generator-core" }
 pollster.workspace = true
 rfd.workspace = true
 

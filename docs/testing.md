@@ -58,8 +58,11 @@ stopped-result reporting, and deterministic per-file failures.
 CLI tests cover command/help parsing, human and NDJSON contracts, final typed
 results, failure and interruption exit codes, and non-installing prerequisite
 advice. GUI tests use `egui_kittest` accessibility trees for top navigation,
-responsive reachability, enabled states, Activity controls/logs, and About/legal
-content; no display or FFmpeg is required.
+enabled states, Activity controls/logs, and About/legal content, and they assert
+layout geometry from the same trees: no control leaves the window at the minimum
+size, the default size, 150%/200% display scaling, or a full-screen width; the
+column stays centered and stops widening; the browse buttons reflow only when
+the column is tight. No display or FFmpeg is required.
 
 Shell contract tests cover engine preference/override, install behavior, hook
 ordering and failure propagation, release target selection, package staging,

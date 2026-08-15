@@ -2415,7 +2415,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "playlist-generator"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "clap",
  "playlist-generator-core",
@@ -2426,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-core"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "atomic-write-file",
  "command-group",
@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-gui"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "eframe",
  "egui",
