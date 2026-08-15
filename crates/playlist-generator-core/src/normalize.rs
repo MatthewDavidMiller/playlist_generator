@@ -75,7 +75,7 @@ pub fn normalize(
         );
     }
     let next = AtomicUsize::new(0);
-    let stopped = thread::scope(|scope| {
+    thread::scope(|scope| {
         for _ in 0..request.jobs.min(jobs.len()) {
             let state = Arc::clone(&state);
             let next = &next;
@@ -96,8 +96,8 @@ pub fn normalize(
                 }
             });
         }
-        control.is_cancelled()
     });
+    let stopped = control.is_cancelled();
     let mut progress = state
         .lock()
         .map_err(|_| Error::Process("progress lock failed".into()))?;

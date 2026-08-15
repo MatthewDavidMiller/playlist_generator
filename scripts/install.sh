@@ -20,6 +20,6 @@ else
     engine=podman
 fi
 
-"${engine}" build --pull=always --tag playlist-generator-dev:0.9.0 --file Containerfile .
+"${engine}" build --pull=always --tag playlist-generator-dev:0.9.1 --file Containerfile .
 git config core.hooksPath .githooks
 ./scripts/container.sh bash scripts/doctor.sh

@@ -53,7 +53,7 @@ playlist insertion and atomicity, executable lookup, loudness parsing and
 filter injection, FFmpeg argument boundaries, bounded pipe draining,
 process-group cancellation, normalization planning/resume/collisions,
 no-clobber persistence, fixed concurrency, monotonic progress, pause/cancel,
-and deterministic per-file failures.
+stopped-result reporting, and deterministic per-file failures.
 
 CLI tests cover command/help parsing, human and NDJSON contracts, final typed
 results, failure and interruption exit codes, and non-installing prerequisite

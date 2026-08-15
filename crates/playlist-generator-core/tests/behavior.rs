@@ -167,6 +167,52 @@ fn normalization_is_resumable_and_never_changes_the_source() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[derive(Debug)]
+struct CancellingFfmpeg(RunControl);
+
+impl ProcessRunner for CancellingFfmpeg {
+    fn run(
+        &self,
+        _executable: &Path,
+        _arguments: &[OsString],
+        _control: &RunControl,
+    ) -> playlist_generator_core::Result<ProcessOutput> {
+        self.0.cancel();
+        Err(playlist_generator_core::Error::Interrupted)
+    }
+}
+
+#[test]
+fn cancellation_during_a_worker_is_reported_as_stopped() {
+    let root = temporary("cancelled-normalize");
+    let source = root.join("source");
+    let output = root.join("output");
+    let ffmpeg = root.join("ffmpeg");
+    assert!(fs::create_dir_all(&source).is_ok());
+    assert!(fs::write(source.join("track.mp3"), []).is_ok());
+    assert!(fs::write(&ffmpeg, []).is_ok());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        assert!(fs::set_permissions(&ffmpeg, fs::Permissions::from_mode(0o755)).is_ok());
+    }
+    let control = RunControl::default();
+    let runner = CancellingFfmpeg(control.clone());
+    let result = normalize(
+        &NormalizeRequest {
+            source_directory: source,
+            output_directory: output,
+            ffmpeg: Some(ffmpeg),
+            jobs: 1,
+        },
+        &runner,
+        &control,
+        &|_| {},
+    );
+    assert!(result.is_ok_and(|summary| summary.stopped));
+    let _ = fs::remove_dir_all(root);
+}
+
 #[cfg(unix)]
 #[test]
 fn non_utf8_playlist_paths_are_rejected() {

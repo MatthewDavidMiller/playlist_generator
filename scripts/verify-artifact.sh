@@ -34,7 +34,7 @@ case ${package} in
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_NX_COMPAT'
             llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_DLL_CHARACTERISTICS_HIGH_ENTROPY_VA'
             imports=$(llvm-readobj --coff-imports "${binary}" | sed -n 's/.*Name: \(.*\.dll\)/\1/ip')
-            if grep -Eiv '^(api-ms-win-[a-z0-9-]+|kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|combase|comdlg32|comctl32|dwmapi|imm32|secur32|ws2_32|ntdll|bcrypt|bcryptprimitives|crypt32|rpcrt4|shlwapi|uxtheme|winmm|version|setupapi|cfgmgr32|propsys|windowscodecs|opengl32|uiautomationcore|userenv|msvcrt)\.dll$' <<<"${imports}" | grep -q .; then
+            if grep -Eiv '^(api-ms-win-[a-z0-9-]+|kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|combase|comdlg32|comctl32|dwmapi|dxgi|imm32|secur32|ws2_32|ntdll|bcrypt|bcryptprimitives|crypt32|rpcrt4|shlwapi|uxtheme|winmm|version|setupapi|cfgmgr32|propsys|windowscodecs|opengl32|uiautomationcore|userenv|msvcrt)\.dll$' <<<"${imports}" | grep -q .; then
                 echo "Unexpected runtime DLL dependency in ${binary}" >&2
                 exit 1
             fi

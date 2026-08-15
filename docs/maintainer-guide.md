@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 0.9.0 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 0.9.1 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-gui ─┐
@@ -19,7 +19,9 @@ playlist-generator ─────┘
 - `playlist-generator` is the `clap` CLI and its human/NDJSON presenters.
 - `playlist-generator-gui` owns the `eframe` shell and asynchronous `rfd`
   pickers. Keep interaction state here and operating-system-independent rules
-  in core.
+  in core. The native renderer is `wgpu`/Direct3D on Windows and Glow on Linux;
+  keep the renderer features target-specific so Windows does not depend on the
+  system OpenGL implementation.
 
 All first-party crates inherit `unsafe_code = "forbid"`, warning denial, and
 strict Clippy policy. Release panic unwinding remains enabled so temporary-file
@@ -42,7 +44,8 @@ bound; surfaced diagnostics retain at most 4 KiB.
 Encoding uses a same-directory temporary file. A no-clobber hard-link persist
 step prevents races from replacing completed output, after which the temporary
 name is removed. Cancellation kills and reaps the group and cleanup removes an
-incomplete temporary file.
+incomplete temporary file. The GUI retains and joins its operation thread when
+the window closes so that this cleanup finishes before process exit.
 
 ## Container workflow
 

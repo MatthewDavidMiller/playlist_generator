@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::thread;
+use std::thread::{self, JoinHandle};
 
 use eframe::egui;
 use playlist_generator_core::{
@@ -53,6 +53,7 @@ pub struct PlaylistGeneratorApp {
     progress: Option<OperationEvent>,
     activity: VecDeque<String>,
     control: Option<RunControl>,
+    operation_thread: Option<JoinHandle<()>>,
     tx: Sender<Message>,
     rx: Receiver<Message>,
 }
@@ -74,6 +75,7 @@ impl Default for PlaylistGeneratorApp {
             progress: None,
             activity: VecDeque::new(),
             control: None,
+            operation_thread: None,
             tx,
             rx,
         }
@@ -117,6 +119,9 @@ impl PlaylistGeneratorApp {
                     self.log(message);
                     self.busy = false;
                     self.control = None;
+                    if let Some(worker) = self.operation_thread.take() {
+                        let _ = worker.join();
+                    }
                 }
             }
         }
@@ -148,7 +153,7 @@ impl PlaylistGeneratorApp {
         self.busy = true;
         self.log("Creating playlist…");
         let tx = self.tx.clone();
-        thread::spawn(move || {
+        let worker = thread::spawn(move || {
             let message = generate(&request).map_or_else(
                 |error| format!("Playlist failed: {error}"),
                 |result| {
@@ -161,6 +166,7 @@ impl PlaylistGeneratorApp {
             );
             let _ = tx.send(Message::Finished(message));
         });
+        self.operation_thread = Some(worker);
     }
 
     fn start_normalize(&mut self) {
@@ -175,7 +181,7 @@ impl PlaylistGeneratorApp {
         self.busy = true;
         self.log("Starting normalization…");
         let tx = self.tx.clone();
-        thread::spawn(move || {
+        let worker = thread::spawn(move || {
             let progress_tx = tx.clone();
             let result = normalize(&request, &SystemProcessRunner, &control, &move |progress| {
                 let _ = progress_tx.send(Message::Progress(progress));
@@ -193,6 +199,7 @@ impl PlaylistGeneratorApp {
             );
             let _ = tx.send(Message::Finished(message));
         });
+        self.operation_thread = Some(worker);
     }
 
     fn nav(&mut self, ui: &mut egui::Ui) {
@@ -401,6 +408,9 @@ impl Drop for PlaylistGeneratorApp {
         if let Some(control) = &self.control {
             control.cancel();
         }
+        if let Some(worker) = self.operation_thread.take() {
+            let _ = worker.join();
+        }
     }
 }
 
@@ -408,8 +418,19 @@ pub fn fit_initial_size(work_area: egui::Vec2) -> egui::Vec2 {
     egui::vec2(960.0_f32.min(work_area.x), 640.0_f32.min(work_area.y))
 }
 
+#[cfg(windows)]
+fn native_renderer() -> eframe::Renderer {
+    eframe::Renderer::Wgpu
+}
+
+#[cfg(not(windows))]
+fn native_renderer() -> eframe::Renderer {
+    eframe::Renderer::Glow
+}
+
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
+        renderer: native_renderer(),
         viewport: egui::ViewportBuilder::default()
             .with_title("Playlist Generator")
             .with_inner_size([960.0, 640.0])
@@ -449,7 +470,7 @@ mod tests {
         let mut harness = Harness::new_eframe(|_| PlaylistGeneratorApp::default());
         harness.get_by_label("About").click();
         harness.run();
-        assert!(harness.query_by_label("Version 0.9.0").is_some());
+        assert!(harness.query_by_label("Version 0.9.1").is_some());
         assert!(harness.query_by_label("Project repository").is_some());
     }
 }
