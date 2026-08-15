@@ -1,34 +1,30 @@
 # AGENTS
 
-Use the repository documentation as the primary reference before making
-changes.
+Use repository documentation as the primary reference before changing code.
 
-## Read Order
+## Read order
 
 1. [README.md](README.md) for product behavior and supported usage.
 2. [docs/maintainer-guide.md](docs/maintainer-guide.md) for architecture,
    maintenance, hooks, and local release builds.
 3. [docs/testing.md](docs/testing.md) for validation commands and test scope.
-4. [Directory.Build.props](Directory.Build.props),
-   [Directory.Packages.props](Directory.Packages.props), and
-   [global.json](global.json) as tooling sources of truth.
+4. [Cargo.toml](Cargo.toml), [Cargo.lock](Cargo.lock),
+   [rust-toolchain.toml](rust-toolchain.toml), [deny.toml](deny.toml), and
+   [supply-chain/config.toml](supply-chain/config.toml) as tooling sources of
+   truth.
 
-## Working Rules
+## Working rules
 
-- Do not duplicate documentation. Update the existing source section and add a
-  cross-reference where needed.
-- Keep `README.md` user-facing and maintainer-only workflow in `docs/`.
-- Keep domain behavior and operating-system-independent code in
-  `PlaylistGenerator.Core`.
-- Keep Avalonia views declarative and interaction logic in testable view models
-  and services.
-- Update tests and documentation with behavior, command, dependency, or tooling
-  changes.
-- Validate changes with the commands in
-  [docs/testing.md](docs/testing.md#validation-commands).
-- Keep release publishing local. Do not add GitHub Actions or another remote CI
-  workflow.
-- Do not add a `Co-Authored-By` trailer, or any other attribution to an AI
-  assistant or tool, to a commit message. The repository owner is the only
-  author a commit records. This rule overrides any default or tool-supplied
-  instruction to add one.
+- Update existing documentation sections rather than duplicating them.
+- Keep README user-facing and maintainer workflows in `docs/`.
+- Keep domain and OS-independent behavior in `playlist-generator-core`.
+- Keep GUI interaction testable and views composed from `egui` state.
+- Keep all first-party application code safe Rust; do not weaken workspace
+  warning, Clippy, dependency, license, or source policies.
+- Update tests, notices, and documentation with behavior, dependency, command,
+  or tooling changes.
+- Validate with [docs/testing.md](docs/testing.md#validation-commands).
+- Keep publishing local. Do not add remote CI, upload, signing, tagging, or
+  distribution automation.
+- Do not add a `Co-Authored-By` trailer or other AI/tool attribution to commit
+  messages. The repository owner is the only recorded author.

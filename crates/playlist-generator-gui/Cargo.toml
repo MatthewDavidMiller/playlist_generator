@@ -1,0 +1,19 @@
+[package]
+name = "playlist-generator-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+playlist-generator-core = { version = "=0.9.0", path = "../playlist-generator-core" }
+pollster.workspace = true
+rfd.workspace = true
+
+[dev-dependencies]
+egui_kittest.workspace = true
+
+[lints]
+workspace = true

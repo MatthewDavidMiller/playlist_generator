@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/playlist-generator-core",
+  "crates/playlist-generator",
+  "crates/playlist-generator-gui",
+]
+
+[workspace.package]
+version = "0.9.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.97.1"
+
+[workspace.dependencies]
+atomic-write-file = "0.3.0"
+clap = { version = "=4.6.6", features = ["derive"] }
+command-group = "=5.0.1"
+eframe = { version = "=0.36.1", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
+egui = "=0.36.1"
+egui_kittest = { version = "=0.36.1", features = ["eframe", "snapshot"] }
+num_cpus = "1.17.0"
+pollster = "0.4.0"
+rand = "0.10.0"
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "wayland"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+signal-hook = "0.3.18"
+thiserror = "2.0.18"
+walkdir = "2.5.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+too_many_lines = "allow"
+module_name_repetitions = "allow"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "unwind"
+strip = "symbols"

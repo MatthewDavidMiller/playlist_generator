@@ -4,12 +4,12 @@
 .idea/
 .vs/
 .vscode/
-*.user
-*.suo
+.cache/
+*.swp
 
-# .NET build and test output
+# Rust build, release, and coverage output
 artifacts/
-bin/
 coverage/
-obj/
-TestResults/
+target/
+*.profraw
+*.cdx.json

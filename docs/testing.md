@@ -1,193 +1,80 @@
 # Testing Guide
 
-This is the validation reference for the repository. For user behavior, see
-[README.md](../README.md). For architecture and release workflow, see
-[docs/maintainer-guide.md](maintainer-guide.md).
+This is the validation source of truth. Product behavior is in
+[README.md](../README.md), and architecture/releases are in
+[maintainer-guide.md](maintainer-guide.md).
 
-## Sources of Truth
+## Validation commands
 
-- [Directory.Build.props](../Directory.Build.props) defines compiler,
-  analyzer, deterministic-build, and lock-file rules.
-- [Directory.Packages.props](../Directory.Packages.props) pins package versions.
-- [global.json](../global.json) selects the .NET 10 SDK.
-- [`.githooks/pre-commit`](../.githooks/pre-commit) defines the local CI/CD
-  pipeline.
-- [`scripts/validate.sh`](../scripts/validate.sh) defines its validation stage.
-
-## Validation Commands
-
-Run the validation stage used by the Git hook:
+Bootstrap the pinned container and tracked hook once:
 
 ```bash
-./scripts/validate.sh
+make install
 ```
 
-For isolated diagnostics, run its commands in order:
+Run the complete pre-commit acceptance gate:
 
 ```bash
-./scripts/test-pre-commit-hook.sh
-dotnet restore PlaylistGenerator.slnx --locked-mode
-dotnet format PlaylistGenerator.slnx --no-restore --verify-no-changes
-dotnet build PlaylistGenerator.slnx \
-  --configuration Release \
-  --no-restore \
-  --disable-build-servers \
-  --maxcpucount:1
-dotnet test PlaylistGenerator.slnx \
-  --configuration Release \
-  --no-build \
-  --no-restore \
-  --disable-build-servers \
-  --maxcpucount:1
+make gate
 ```
 
-Warnings are errors. Package restore must match committed lock files.
+The gate runs, in order:
 
-## Code Coverage
+1. `cargo fmt --all -- --check`
+2. strict workspace/all-target Clippy
+3. warning-free workspace rustdoc
+4. ShellCheck over scripts and the hook
+5. all workspace tests with locked dependencies
+6. cargo-deny and cargo-vet
+7. Trivy vulnerability, secret, and misconfiguration scans
+8. generated-notice comparison
+9. verified Linux x64 and Windows x64 release packaging
 
-The xUnit v3 project uses the .NET test SDK and Coverlet collector. Generate
-Cobertura coverage with:
+Every stage runs through [`scripts/container.sh`](../scripts/container.sh).
+Focused targets are:
 
 ```bash
-dotnet test PlaylistGenerator.slnx \
-  --collect:"XPlat Code Coverage" \
-  --results-directory TestResults
+make lint
+make test
+make coverage
+make security
+make build-linux
+make build-windows
 ```
 
-The report is written below the test project's `TestResults` output.
+Coverage HTML is produced by `cargo llvm-cov`. `make release-all` adds both
+ARM64 packages and is the full release acceptance command.
 
-## Test Layout
+## Test scope
 
-`tests/PlaylistGenerator.Tests/` mirrors the source layout:
+Core tests cover supported extensions, recursive scanning, symlink/reparse
+boundaries, unreadable trees, component containment, UTF-8/CR/LF path rules,
+playlist insertion and atomicity, executable lookup, loudness parsing and
+filter injection, FFmpeg argument boundaries, bounded pipe draining,
+process-group cancellation, normalization planning/resume/collisions,
+no-clobber persistence, fixed concurrency, monotonic progress, pause/cancel,
+and deterministic per-file failures.
 
-- `Core/` covers `PlaylistGenerator.Core`, one test class per type.
-- `CommandLine/` covers argument parsing and command dispatch.
-- `Presentation/` covers the view models and path suggestions.
-- `Desktop/` covers the Avalonia window on the headless platform.
-- `TestSupport/` holds fakes and fixtures, one type per file.
+CLI tests cover command/help parsing, human and NDJSON contracts, final typed
+results, failure and interruption exit codes, and non-installing prerequisite
+advice. GUI tests use `egui_kittest` accessibility trees for top navigation,
+responsive reachability, enabled states, Activity controls/logs, and About/legal
+content; no display or FFmpeg is required.
 
-No test requires FFmpeg or a display server. `FakeProcessRunner` stands in for
-FFmpeg, `FakeExecutableLocator` keeps resolution off the machine's `PATH`, and
-`Avalonia.Headless.XUnit` runs the real window without one.
+Shell contract tests cover engine preference/override, install behavior, hook
+ordering and failure propagation, release target selection, package staging,
+and the absence of gate bypasses. Controlled helper executables exercise real
+pipe and process-tree behavior without relying on FFmpeg.
 
-`HeadlessAppBuilder` must register the same font the application does. Without a
-font, wrapped text never settles on a line break and the layout pass runs
-forever, so a view holding a paragraph hangs the run instead of failing it.
-`MainWindowTests.ExpandedErrorDetailLaysOutItsWholeText` is the guard for that.
+Add a regression test for every defect. Inject catalog/process/shuffle behavior
+when a unit test does not need the real filesystem or process layer.
 
-Tests that observe normalization must synchronize on a reported signal rather
-than a bare `Task.Yield`, because files are processed on thread-pool workers.
-`AudioNormalizationServiceTests.CreateService` runs one file at a time so that
-ordering assertions stay meaningful; the concurrency tests opt in explicitly.
+## Artifact acceptance
 
-## Test Scope
+`scripts/verify-artifact.sh` rejects packages whose ELF files are not PIE with
+NX/RELRO, contain RPATH/RUNPATH, or have the wrong architecture. It rejects PE
+files with the wrong console/GUI subsystem or without ASLR, DEP, and high
+entropy VA, and rejects unexpected non-system runtime DLL dependencies.
 
-The suite covers:
-
-- Recursive audio discovery, extension handling, ordering, validation,
-  symbolic-link boundaries, and link cycles.
-- Path normalization: home expansion, relative segments, platform case rules,
-  and containment that does not treat `/musicbox` as a child of `/music`.
-- Pure interval-playlist composition, special-file exclusion, UTF-8 and
-  non-ASCII output, absence of leftover temporary files, and preservation of an
-  existing playlist when input disappears.
-- FFmpeg argument construction without shell parsing, including that neither
-  pass decodes the cover art embedded in most music files.
-- Real process argument boundaries, shell-metacharacter inertness, output
-  larger than a pipe buffer, diagnostics, start failures, process-tree
-  cancellation, and absence of unobserved task exceptions after cancellation.
-- Executable resolution by explicit path and by search path, including
-  precedence, blank entries, quoted entries, entries that are unusable rather
-  than merely absent, and permission checks.
-- Loudness JSON extraction from mixed log output, quoted and bare numeric
-  values, and malformed, missing, and empty-field diagnostics.
-- Normalization planning: relative paths, output-tree skips, resumable existing
-  outputs, parent/child output layouts, and destination collisions.
-- Normalization execution: Opus settings, untouched sources, progress
-  invariants, a resumed run that reports its skips as one update rather than one
-  per file, pause between passes, cancellation while paused, retention of
-  files that already finished, a stop that is not recorded as a per-file
-  failure even when the interrupted process reports a non-zero exit, FFmpeg
-  failures, diagnostic truncation, and missing output after a false-success
-  process result.
-- Normalization concurrency: every file converted when several run at once,
-  observed overlap bounded by the configured worker count, counts that stay
-  self-consistent and never run backwards, rejection of a worker count below
-  one, and an unexpected fault reaching the caller unwrapped rather than buried
-  in an `AggregateException`.
-- Per-file failure handling: a broken file is recorded rather than thrown, the
-  files around it still produce output, a failed file counts as completed for
-  progress, and a source that disappears fails only itself.
-- Rejection of an output folder equal to the source folder, which would
-  otherwise silently skip every file.
-- Pause signalling: non-blocking waits, idempotent pause and resume, release of
-  every waiter, and cancellation while paused.
-- CLI parsing, JSON contracts, usage errors, per-command help, exit codes
-  including the internal-error path, and non-executing FFmpeg installation
-  advice.
-- Composition root wiring for both the default and substituted graphs, and the
-  CLI application the root builds.
-- Atomic writes: a created destination directory, a write that cannot succeed,
-  and the absence of a stranded temporary file afterwards.
-- Unreadable source trees, executable lookups that match nothing, and a
-  directory that shares an executable's name.
-- Loudness JSON taken from either FFmpeg output stream.
-- View-model path suggestions, request mapping, shared status and busy state
-  that stays busy until the last overlapping operation ends, progress reset
-  between runs, the progress line's wording for the current file and step, theme
-  delegation, disposal while a run is in flight, failure counts and detail, and
-  pause/resume/stop coordination.
-- About content: the licence text carried in the build, the copyright holder
-  quoted from that licence rather than restated, the version reported without
-  build metadata, and the project address.
-- Responsive layout: the width breakpoints including their exact boundaries, an
-  unmeasured width that must not select the compact layout, a first-run size
-  fitted to a short, small, tiny, or unknown work area, and size-class changes
-  announced only when the class really changed.
-- File-picker adapter construction, the folder picker's refusal when no window
-  is ready yet, and pickers the headless platform cannot satisfy.
-- AXAML compiled bindings and platform adapter compatibility through the
-  Release solution build, and window construction, the declared and minimum
-  size taken from `WindowLayout` rather than restated in markup, live binding
-  values, tab
-  content, the about tab's owner, licence, and project link, wrapped text that
-  lays out rather than looping, the normalization stat tiles and their failure
-  marking, the width the
-  window reports to the layout, browse buttons that stack under their fields in
-  a narrow window and sit beside them in a wide one, and
-  close-cancels-the-run through the headless tests.
-
-Add regression tests for every defect fixed. Prefer core and view-model tests
-over tests that require a display server.
-
-## Release Build Validation
-
-Inspect publish commands without restoring runtime packs:
-
-```bash
-./scripts/build-release.sh --dry-run
-```
-
-Produce and inspect a real Windows cross-build on Linux:
-
-```bash
-./scripts/build-release.sh --runtime win-x64
-test -x artifacts/win-x64/desktop/PlaylistGenerator.exe
-test -x artifacts/win-x64/cli/playlist-generator.exe
-```
-
-The Windows executable bit is a Unix filesystem attribute only; functional GUI
-smoke testing still needs a supported Windows system.
-
-## Hook Behavior
-
-After `./scripts/install-hooks.sh`, every `git commit` runs the full validation
-script and then `./scripts/build-release.sh --runtime win-x64`. A hook
-regression, format, build, analyzer, lock-file, test, or Windows publish failure
-blocks the commit. A successful commit refreshes:
-
-- `artifacts/win-x64/desktop/PlaylistGenerator.exe`
-- `artifacts/win-x64/cli/playlist-generator.exe`
-
-The repository has no remote CI substitute, so do not bypass the hook without
-running both stages manually.
+Each platform directory must also contain both binaries, the repository
+license, generated notices, and a non-empty CycloneDX SBOM.

@@ -1,0 +1,2 @@
+# Containers are always launched with the invoking UID/GID by scripts/container.sh.
+AVD-DS-0002

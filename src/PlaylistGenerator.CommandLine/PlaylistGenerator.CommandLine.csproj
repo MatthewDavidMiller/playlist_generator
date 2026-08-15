@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <Description>Testable command parsing and console presentation for Playlist Generator.</Description>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../PlaylistGenerator.Core/PlaylistGenerator.Core.csproj" />
-  </ItemGroup>
-</Project>
