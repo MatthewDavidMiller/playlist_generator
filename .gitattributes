@@ -1,1 +1,5 @@
+# The gates run in a Linux container against whatever the host checked out. A
+# CRLF checkout on Windows would hand every shell script an unusable shebang.
+* text=auto eol=lf
+
 THIRD_PARTY_NOTICES.txt -whitespace

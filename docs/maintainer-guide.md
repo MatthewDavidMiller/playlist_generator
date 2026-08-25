@@ -5,11 +5,11 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 0.9.4 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 0.9.5 and pinned to Rust 1.97.1:
 
 ```text
-playlist-generator-gui ─┐
-                        ├──> playlist-generator-core
+playlist-generator-gui ─┐   (packaged for Windows)
+playlist-generator-tui ─┼──> playlist-generator-core
 playlist-generator ─────┘
 ```
 
@@ -19,7 +19,27 @@ playlist-generator ─────┘
 - `playlist-generator` is the `clap` CLI and its human/NDJSON presenters.
 - `playlist-generator-gui` owns the `eframe` shell and asynchronous `rfd`
   pickers. Keep interaction state here and operating-system-independent rules
-  in core. The native renderer is Glow on every target.
+  in core. The native renderer is Glow.
+- `playlist-generator-tui` owns the `ratatui` terminal frontend over the same
+  core API. `app.rs` holds interaction state and takes key events; `ui.rs`
+  draws from that state and nothing else, so both are tested without a tty.
+
+### Which frontend ships where
+
+The desktop crate is packaged for Windows and the terminal crate for Linux.
+
+The toolbox is Alpine, so the Linux packages are musl. The `eframe` stack
+dlopens libX11, libwayland, and libGL, and a binary that dlopens cannot be
+statically linked; a dynamically linked musl build would then resolve musl's
+loader and run on Alpine and nowhere else. A terminal is read, write, and ioctl
+on file descriptors and resolves nothing at run time, so the terminal build
+links fully static and one Linux package runs on every distribution.
+
+The desktop crate still compiles and runs its `egui_kittest` suite on the
+toolbox host, so dropping it from the Linux package costs no test coverage.
+`scripts/lint.sh` additionally lints it against `x86_64-pc-windows-gnu`,
+because `build.rs`, the subsystem attribute, and the startup log are invisible
+to a host-target lint.
 
 Lay pages out inside `form`, which centres one column, caps it at `FORM_WIDTH`,
 and reports whether it fell under `NARROW_BREAKPOINT`. Take every width from
@@ -35,19 +55,30 @@ work with.
 The binary is linked for the Windows GUI subsystem, so it has no console and
 nothing it writes to standard error is ever seen. Three rules follow.
 
-Both Windows packages link with llvm-mingw, through the
-`x86_64-pc-windows-gnullvm` and `aarch64-pc-windows-gnullvm` targets. The GNU
-binutils Debian ships for `x86_64-pc-windows-gnu` are 2.40, which drops import
-descriptors when one DLL is imported through several of them. The desktop
-binary imported kernel32 from four descriptors; three were discarded and the
-eighteen thunks they owned kept the file-relative address of their own import
-name, which the loader never overwrites. The first call through one,
-`GetModuleHandleA`, jumped to 0x7265c0, so 0.9.0 through 0.9.2 died with
-0xC0000005 before reaching `main` — no window, no message box, and a process
-too short-lived to see. The CLI, which imports far less, was unaffected.
-Binutils 2.44 and LLD both emit the table correctly. `verify-artifact.sh` now
-fails the release unless every import address table slot belongs to a
-descriptor.
+The Windows package links with the MinGW GNU toolchain through
+`x86_64-pc-windows-gnu`. The GNU binutils Debian shipped for that target were
+2.40, which drops import descriptors when one DLL is imported through several
+of them. The desktop binary imported kernel32 from four descriptors; three were
+discarded and the eighteen thunks they owned kept the file-relative address of
+their own import name, which the loader never overwrites. The first call
+through one, `GetModuleHandleA`, jumped to 0x7265c0, so 0.9.0 through 0.9.2
+died with 0xC0000005 before reaching `main` — no window, no message box, and a
+process too short-lived to see. The CLI, which imports far less, was
+unaffected.
+
+0.9.3 worked around it by linking with LLD through the `*-pc-windows-gnullvm`
+targets. That is no longer possible: llvm-mingw publishes no musl build, so its
+prebuilt toolchain cannot run on the Alpine toolbox at all. Alpine's binutils
+are 2.45, past the 2.44 release that emits the table correctly, so the GNU
+linker is used again — and not on trust. `verify-artifact.sh` fails the release
+unless every import address table slot belongs to a descriptor, which is
+exactly this corruption, and it runs on every packaged build. LLD also set the
+subsystem and OS versions to 6.00 unprompted; GNU ld does not, so
+`.cargo/config.toml` asks for them explicitly.
+
+Windows ARM64 was dropped in the same change. Alpine packages no aarch64 MinGW
+and llvm-mingw has no musl build, so `aarch64-pc-windows-gnullvm` cannot be
+produced from the toolbox.
 
 Every fatal path must reach a message box, and every launch must leave
 evidence. `run` reports a failed `eframe::run_native`, an installed panic hook
@@ -64,8 +95,7 @@ resolved late, and Explorer, SmartScreen, and endpoint protection see an
 unnamed, unversioned executable. `windres` comes from the MinGW toolchain that
 already provides the cross linkers, so this adds no build dependency; set
 `WINDRES` to override the detected one. `scripts/verify-artifact.sh` fails the
-release if `.rsrc`, the manifest, or the version resource is missing. LLD sets
-the subsystem and OS versions to 6.00 on its own, so no linker argument does.
+release if `.rsrc`, the manifest, or the version resource is missing. 
 
 All first-party crates inherit `unsafe_code = "forbid"`, warning denial, and
 strict Clippy policy. Release panic unwinding remains enabled so temporary-file
@@ -93,28 +123,50 @@ the window closes so that this cleanup finishes before process exit.
 
 ## Container workflow
 
-[`Containerfile`](../Containerfile) pins its base image by digest and installs
-Rust, GUI headers, Linux/Windows cross linkers, ShellCheck, Trivy, cargo-deny,
-cargo-vet, cargo-about, cargo-cyclonedx, and cargo-llvm-cov at the versions
-declared there.
+[`Containerfile`](../Containerfile) builds the toolbox on the official Alpine
+image, pinned by digest. Alpine is what keeps the supply chain short: the GNU
+userland, the MinGW cross toolchain and its binutils, LLVM's object readers,
+ShellCheck, and the X11/Wayland/mesa headers all arrive as apk-signed packages.
+Three things cannot:
 
-[`scripts/container.sh`](../scripts/container.sh) is the single wrapper used by
-Make. It runs as the invoking UID/GID, mounts no engine socket, drops all
-capabilities, enables `no-new-privileges`, applies process/memory bounds, and
-uses named Cargo/target caches. Podman workspace mounts use SELinux relabeling.
+- Rust, because Alpine's newest is behind the pin in `rust-toolchain.toml`. It
+  comes from the Rust project's own channel at the pinned version.
+- The five cargo subcommands, at the versions the policy files were written
+  against, from the registry.
+- Trivy, which Alpine does not package, through
+  [`scripts/install-trivy.sh`](../scripts/install-trivy.sh) — pinned to a
+  version and a SHA-256 together, so a replaced asset fails the build.
 
-Authoritative targets are `install`, `lint`, `test`, `coverage`, `security`,
-`build-linux`, `build-windows`, `build-release`, `release-all`, `gate`, and
-`clean`. Exact commands and order are documented in
+[`compose.yaml`](../compose.yaml) is the only entry point, and it is the same
+one on Windows and Linux. Every gate is a service. Services run as the invoking
+uid, mount no engine socket, drop all capabilities, enable
+`no-new-privileges`, and apply process and memory bounds. The Cargo registry
+cache is a named volume; the build tree is left at its default `target/` so
+that a gate's output is where a developer expects to find it.
+
+`scripts/setup.sh` writes the git-ignored `.env` holding that uid, builds the
+image, and installs the hooks. Windows needs no uid mapping and runs
+`docker compose build` and `git config core.hooksPath .githooks` directly.
+
+Authoritative services are `gate`, `lint`, `test`, `coverage`, `security`,
+`notices`, `doctor`, `build-linux`, `build-windows`, `build-release`,
+`release-all`, `clean`, and `shell`. Exact commands and order are documented in
 [testing.md](testing.md#validation-commands).
 
 ## Local hook
 
-`make install` sets `core.hooksPath=.githooks`. The tracked pre-commit hook
-unsets Git repository variables inherited by nested test repositories and runs
-`make gate`. Formatting, Clippy, rustdoc, ShellCheck, tests, supply-chain
-checks, Trivy, notice verification, or either x64 release failure blocks the
-commit. There is no skip path and no remote CI replacement.
+`scripts/setup.sh` sets `core.hooksPath=.githooks`.
+
+The tracked pre-commit hook unsets Git repository variables inherited by nested
+test repositories and runs the whole gate in one container. Formatting, either
+Clippy pass, rustdoc, ShellCheck, tests, supply-chain checks, Trivy, notice
+verification, or either x64 release failure blocks the commit. There is no skip
+path and no hosted CI replacement.
+
+The post-commit hook packages the commit that was just made, so the version the
+packages record is the committed one. It skips while a rebase, cherry-pick,
+revert, or merge is replaying commits: packaging each intermediate tree would
+turn a ten-commit rebase into ten cross-builds.
 
 ## Dependencies and notices
 
@@ -124,22 +176,50 @@ rejected by policy. After changing dependencies:
 
 1. Update `Cargo.toml` and regenerate `Cargo.lock` normally.
 2. Review the lockfile and `cargo deny check` results.
-3. Update cargo-vet exemptions/audits deliberately.
-4. Run `make notices` and review the generated legal text.
-5. Run `make gate`.
+3. Update cargo-vet exemptions/audits deliberately, with
+   `cargo vet add-exemption <crate> <version> --criteria safe-to-deploy` for
+   each one rather than regenerating the file wholesale.
+4. Run `docker compose run --rm notices` and review the generated legal text.
+   `about.toml` lists the release triples, so a new target needs that list
+   updated first or the notices will not describe what is shipped.
+5. Run `docker compose run --rm gate`.
 
 Do not hand-edit generated notices.
 
 ## Local releases
 
-`make build-release` builds and verifies Linux x64 and Windows x64. ARM64 is
-explicitly outside the commit hook; `make release-all` also builds
-`aarch64-unknown-linux-gnu` and `aarch64-pc-windows-gnullvm`.
+`docker compose run --rm build-release` builds and verifies Linux x64 and
+Windows x64. Linux ARM64 is outside the commit hook; `release-all` adds it.
 
 Each `artifacts/<platform>/` package contains both binaries under `bin/`,
 `LICENSE`, `THIRD_PARTY_NOTICES.txt`, and a CycloneDX JSON SBOM. Verification
-checks ELF/PE architecture and hardening, CLI versus GUI PE subsystems,
-forbidden ELF runtime paths, and unexpected Windows runtime DLLs.
+checks ELF architecture, static linkage, and hardening; PE architecture,
+subsystem, resources, import-table integrity, and runtime DLL imports.
 
-Publishing is deliberately local. These scripts do not upload, tag, sign, or
-otherwise distribute artifacts.
+Targets and linking live in [`.cargo/config.toml`](../.cargo/config.toml).
+Both Linux packages are static-PIE musl, which Rust's musl targets already
+produce by default; the config deliberately does not restate that, because a
+rustflag saying so would also apply to host builds including the desktop
+crate's test harness. `verify-artifact.sh` asserts both properties on every
+packaged build, so a changed default fails the release rather than shipping
+quietly. The ARM64 package has no cross toolchain and needs none — nothing in
+the dependency graph compiles C, so rustc links it with `rust-lld` against the
+musl objects `rust-std` already ships.
+
+## Publishing
+
+[`scripts/publish-github-release.sh`](../scripts/publish-github-release.sh) is
+the only script that runs on the host rather than in the toolbox: it needs the
+developer's authenticated `gh` and their push credentials, and the toolbox has
+neither. The builds it depends on still run in the container.
+
+It refuses a dirty worktree, a non-`vMAJOR.MINOR.PATCH` version, a tag that
+already points somewhere other than HEAD, and a detached HEAD or a branch with
+no upstream. It exits without rebuilding if the release already exists. Archives
+are built with fixed ownership, ordering, and timestamps so a retry is
+byte-reproducible, accompanied by `SHA256SUMS`. The branch and tag are pushed
+atomically, because the API cannot attach a release to a commit GitHub has not
+received.
+
+There is no hosted CI runner and nothing builds, tests, or releases off this
+machine.

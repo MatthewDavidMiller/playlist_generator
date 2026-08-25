@@ -1,2 +1,4 @@
-# Containers are always launched with the invoking UID/GID by scripts/container.sh.
+# The toolbox image declares no USER. compose.yaml supplies the invoking user's
+# uid at run time, which is not known when the image is built, and baking one in
+# would be overridden there anyway.
 AVD-DS-0002

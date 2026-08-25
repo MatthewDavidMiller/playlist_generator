@@ -9,7 +9,8 @@ Use repository documentation as the primary reference before changing code.
    maintenance, hooks, and local release builds.
 3. [docs/testing.md](docs/testing.md) for validation commands and test scope.
 4. [Cargo.toml](Cargo.toml), [Cargo.lock](Cargo.lock),
-   [rust-toolchain.toml](rust-toolchain.toml), [deny.toml](deny.toml), and
+   [rust-toolchain.toml](rust-toolchain.toml), [Containerfile](Containerfile),
+   [compose.yaml](compose.yaml), [deny.toml](deny.toml), and
    [supply-chain/config.toml](supply-chain/config.toml) as tooling sources of
    truth.
 
@@ -18,13 +19,19 @@ Use repository documentation as the primary reference before changing code.
 - Update existing documentation sections rather than duplicating them.
 - Keep README user-facing and maintainer workflows in `docs/`.
 - Keep domain and OS-independent behavior in `playlist-generator-core`.
-- Keep GUI interaction testable and views composed from `egui` state.
+- Keep frontend interaction testable: the desktop views composed from `egui`
+  state, the terminal views drawn from `App` state and asserted through
+  ratatui's test backend.
+- Package the desktop frontend for Windows and the terminal frontend for Linux.
+  Do not add a Linux desktop package: its stack cannot link statically.
 - Keep all first-party application code safe Rust; do not weaken workspace
   warning, Clippy, dependency, license, or source policies.
 - Update tests, notices, and documentation with behavior, dependency, command,
   or tooling changes.
 - Validate with [docs/testing.md](docs/testing.md#validation-commands).
-- Keep publishing local. Do not add remote CI, upload, signing, tagging, or
-  distribution automation.
+- Keep publishing local. Do not add a hosted CI runner or any workflow that
+  builds, tests, or releases off this machine. Releases are cut by
+  `scripts/publish-github-release.sh`, which runs the containerized builds
+  locally and then uses the developer's own authenticated `gh`.
 - Do not add a `Co-Authored-By` trailer or other AI/tool attribution to commit
   messages. The repository owner is the only recorded author.

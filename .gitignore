@@ -7,6 +7,9 @@
 .cache/
 *.swp
 
+# Local container settings written by scripts/setup.sh
+.env
+
 # Rust build, release, and coverage output
 artifacts/
 coverage/

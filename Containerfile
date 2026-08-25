@@ -1,48 +1,121 @@
-FROM docker.io/library/debian@sha256:362e64223cc0da95422b3b13c045186fc0a81250e765d31c025fbddf257f6143
+# The gate toolbox: every compiler, linter, scanner, and test runner the
+# repository gates depend on, so a workstation needs nothing but Docker.
+# compose.yaml runs the gates inside this image.
+#
+# The base is the official Alpine image, pinned by digest. Alpine is what keeps
+# the supply chain short: nearly everything below arrives as an apk-signed
+# package rather than a release tarball. Its musl host is also what makes the
+# static Linux packages a native build instead of a cross-compile.
+#
+# This image is a developer tool, not a shipped artifact: it is never published
+# and never serves traffic. It declares no USER on purpose -- compose.yaml
+# supplies the uid at run time, the invoking user's, so a gate leaves no
+# root-owned files in the tree, and that uid is not known when the image is
+# built. .trivyignore records that as a scoped exception rather than silencing
+# the rule everywhere.
+ARG ALPINE_DIGEST=sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
-ARG DEBIAN_FRONTEND=noninteractive
+FROM docker.io/library/alpine@${ALPINE_DIGEST}
+
 ARG RUST_VERSION=1.97.1
-ARG LLVM_MINGW_VERSION=20260616
-ARG TRIVY_VERSION=0.74.0
+ARG CARGO_DENY_VERSION=0.20.2
+ARG CARGO_VET_VERSION=0.10.2
+ARG CARGO_ABOUT_VERSION=0.9.1
+ARG CARGO_CYCLONEDX_VERSION=0.5.9
+ARG CARGO_LLVM_COV_VERSION=0.8.7
 
 ENV RUSTUP_HOME=/usr/local/rustup
-ENV CARGO_HOME=/usr/local/cargo
-ENV PATH="/usr/local/cargo/bin:/opt/llvm-mingw/bin:${PATH}"
+ENV CARGO_HOME=/cargo
+ENV PATH="/cargo/bin:/usr/local/cargo/bin:/usr/lib/llvm21/bin:${PATH}"
 
-RUN apt-get update \
- && apt-get install --yes --no-install-recommends \
-    binutils build-essential ca-certificates curl file gcc-aarch64-linux-gnu \
-    git libdbus-1-dev libgl1-mesa-dev libwayland-dev libx11-dev libxkbcommon-dev \
-    pkg-config python3 shellcheck xz-utils \
- && rm -rf /var/lib/apt/lists/*
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
-RUN curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs \
-    | sh -s -- -y --profile minimal --default-toolchain "${RUST_VERSION}" \
- && rustup component add clippy rustfmt \
- && rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnullvm aarch64-pc-windows-gnullvm
+# coreutils, findutils, gawk, grep, sed, and diffutils replace busybox's
+# applets with the GNU ones the scripts are written for; busybox rejects
+# extensions these use. binutils supplies readelf, strings, and objdump, and
+# llvm21 supplies llvm-readobj -- scripts/verify-artifact.sh reads ELF and PE
+# headers with all four. zlib-static is what cargo-vet needs: the musl host
+# links everything statically, and Alpine ships the archive separately from the
+# shared library. mingw-w64-gcc carries the Windows cross linker and
+# windres; its binutils is 2.45, which is why the Windows packages link with
+# the GNU linker again (see .cargo/config.toml). The X11, Wayland, mesa, and
+# dbus headers are a lint and test dependency, not a runtime one: the desktop
+# crate still compiles and runs its harness on the host even though it is only
+# packaged for Windows.
+RUN apk add --no-cache \
+        bash \
+        binutils \
+        build-base \
+        ca-certificates \
+        coreutils \
+        curl \
+        dbus-dev \
+        diffutils \
+        file \
+        findutils \
+        gawk \
+        git \
+        grep \
+        libx11-dev \
+        libxkbcommon-dev \
+        llvm21 \
+        mesa-dev \
+        mingw-w64-gcc \
+        musl-dev \
+        pkgconf \
+        sed \
+        shellcheck \
+        tar \
+        wayland-dev \
+        xz \
+        zlib-dev \
+        zlib-static
 
-RUN curl --proto '=https' --tlsv1.2 -fsSL \
-      "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz" \
-      -o /tmp/llvm-mingw.tar.xz \
- && mkdir -p /opt/llvm-mingw \
- && tar -xJf /tmp/llvm-mingw.tar.xz --strip-components=1 -C /opt/llvm-mingw \
- && rm /tmp/llvm-mingw.tar.xz
+# Alpine's newest Rust is behind the pin in rust-toolchain.toml, so the
+# toolchain comes from the Rust project's own channel rather than apk. The host
+# is x86_64-unknown-linux-musl, which is what makes the Linux packages native.
+# aarch64 musl has no cross toolchain here and does not need one: nothing in
+# the dependency graph compiles C, so rust-lld links it against the musl
+# objects rust-std already ships (see .cargo/config.toml).
+RUN curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs -o /tmp/rustup-init.sh \
+ && sh /tmp/rustup-init.sh -y --no-modify-path --profile minimal \
+        --default-toolchain "${RUST_VERSION}" \
+ && rm /tmp/rustup-init.sh \
+ && rustup component add clippy rustfmt llvm-tools \
+ && rustup target add \
+        x86_64-unknown-linux-musl \
+        aarch64-unknown-linux-musl \
+        x86_64-pc-windows-gnu
 
-RUN curl --proto '=https' --tlsv1.2 -fsSL \
-      "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
-      -o /tmp/trivy.tar.gz \
- && tar -xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy \
- && rm /tmp/trivy.tar.gz \
- && cargo install cargo-deny --version 0.20.2 --locked \
- && cargo install cargo-vet --version 0.10.2 --locked \
- && cargo install cargo-about --version 0.9.1 --locked --features cli \
- && cargo install cargo-cyclonedx --version 0.5.9 --locked \
- && cargo install cargo-llvm-cov --version 0.8.7 --locked \
- && rm -rf /usr/local/cargo/registry /usr/local/cargo/git
+# Alpine packages cargo-deny and cargo-cyclonedx but not the other three, and
+# at versions other than the ones this repository's policy files were written
+# against. Installing all five from the registry at pinned versions keeps the
+# gate reading one set of tool behaviours.
+RUN cargo install --locked cargo-deny --version "${CARGO_DENY_VERSION}" \
+ && cargo install --locked cargo-vet --version "${CARGO_VET_VERSION}" \
+ && cargo install --locked cargo-about --version "${CARGO_ABOUT_VERSION}" --features cli \
+ && cargo install --locked cargo-cyclonedx --version "${CARGO_CYCLONEDX_VERSION}" \
+ && cargo install --locked cargo-llvm-cov --version "${CARGO_LLVM_COV_VERSION}" \
+ && rm -rf /cargo/registry /cargo/git
 
-RUN apt-get update \
- && apt-get install --yes --no-install-recommends libc6-dev-arm64-cross \
- && rm -rf /var/lib/apt/lists/*
+# Reuse the repository's own pinned installer rather than restating the version
+# and checksum here, so the image cannot drift from what a host install of the
+# same tool produces.
+COPY scripts/install-trivy.sh /tmp/install-trivy.sh
+RUN /tmp/install-trivy.sh && rm /tmp/install-trivy.sh
+
+# /cargo is world-writable because the container runs as whichever uid invoked
+# it, and the registry cache lives there on a named volume compose.yaml mounts,
+# so downloads survive between gate runs. The git setting is for the
+# bind-mounted repository, which looks foreign-owned to a mapped user; several
+# gates call git.
+#
+# CARGO_TARGET_DIR is deliberately NOT set. Leaving it at its default puts the
+# build tree at /workspace/target, exactly where a host build would put it, so
+# the artifacts a gate produces are the ones a developer finds afterwards.
+RUN mkdir -p /cargo \
+ && chmod 1777 /cargo \
+ && git config --system --add safe.directory '*'
 
 WORKDIR /workspace
 CMD ["bash"]

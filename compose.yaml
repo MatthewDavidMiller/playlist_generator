@@ -1,0 +1,96 @@
+# The only entry point. Every gate is a service here, so the command surface is
+# identical on Windows and Linux and Docker is the only thing either host needs:
+#
+#   docker compose build                  once, and after any Containerfile change
+#   docker compose run --rm gate          the full pre-commit gate
+#   docker compose run --rm lint
+#   docker compose run --rm test
+#   docker compose run --rm shell
+#
+# The repository is bind-mounted relative to this file, which compose resolves
+# against its own directory, so the same declaration is correct on both hosts.
+# No container engine socket is mounted: no gate here builds or scans another
+# image, so that door stays shut.
+
+x-toolbox: &toolbox
+  image: playlist-generator-dev:0.9.5
+  build:
+    context: .
+    dockerfile: Containerfile
+  # scripts/setup.sh writes a git-ignored .env carrying the invoking uid and
+  # gid, so a gate on Linux leaves no root-owned files in the tree. On Windows
+  # there is no .env and no uid to map: Docker Desktop does not project
+  # container ownership onto the host tree, and the default below is correct
+  # there.
+  user: "${PG_UID:-0}:${PG_GID:-0}"
+  init: true
+  volumes:
+    - .:/workspace
+    - cargo:/cargo
+  working_dir: /workspace
+  environment:
+    HOME: /cargo
+  # A gate builds and tests this repository's own code and needs nothing
+  # privileged to do it.
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 1024
+  mem_limit: 8g
+
+services:
+  # The complete acceptance gate. What .githooks/pre-commit runs.
+  gate:
+    <<: *toolbox
+    command: ["bash", "scripts/gate.sh"]
+
+  lint:
+    <<: *toolbox
+    command: ["bash", "scripts/lint.sh"]
+
+  test:
+    <<: *toolbox
+    command: ["cargo", "test", "--workspace", "--all-features", "--locked"]
+
+  coverage:
+    <<: *toolbox
+    command: ["cargo", "llvm-cov", "--workspace", "--all-features", "--locked", "--html"]
+
+  security:
+    <<: *toolbox
+    command: ["bash", "scripts/security.sh"]
+
+  notices:
+    <<: *toolbox
+    command: ["bash", "scripts/notices.sh"]
+
+  doctor:
+    <<: *toolbox
+    command: ["bash", "scripts/doctor.sh"]
+
+  build-linux:
+    <<: *toolbox
+    command: ["bash", "scripts/release.sh", "linux-x64"]
+
+  build-windows:
+    <<: *toolbox
+    command: ["bash", "scripts/release.sh", "windows-x64"]
+
+  build-release:
+    <<: *toolbox
+    command: ["bash", "scripts/release.sh", "linux-x64", "windows-x64"]
+
+  release-all:
+    <<: *toolbox
+    command: ["bash", "scripts/release.sh", "linux-x64", "linux-arm64", "windows-x64"]
+
+  clean:
+    <<: *toolbox
+    command: ["cargo", "clean"]
+
+  shell:
+    <<: *toolbox
+    command: ["bash"]
+
+volumes:
+  cargo:

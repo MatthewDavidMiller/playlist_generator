@@ -1,31 +1,66 @@
 [build]
 rustflags = ["-C", "link-arg=-Wl,-z,relro,-z,now"]
 
-# Both Windows targets link with llvm-mingw. The GNU binutils that Debian ships
-# for `x86_64-pc-windows-gnu` are 2.40, which drops import descriptors when one
-# DLL is imported through several of them: the desktop binary imported kernel32
-# from four descriptors, three were discarded, and the eighteen thunks they
-# owned were left holding the file-relative address of their own import name.
-# The first call through one, `GetModuleHandleA`, jumped to 0x7265c0 and 0.9.0
-# through 0.9.2 died with 0xC0000005 before reaching `main`. LLD emits the table
-# correctly, already builds the ARM64 package, and sets the subsystem and OS
-# versions to 6.00 without being asked.
-[target.x86_64-pc-windows-gnullvm]
-linker = "x86_64-w64-mingw32-clang"
+# There is deliberately no `[target.x86_64-unknown-linux-musl]` block. Rust's
+# musl targets already default to `crt-static` and already emit a static-PIE,
+# which is what the Linux packages need: static is what makes one package work
+# on every distribution rather than only on the toolbox's own, and PIE is what
+# keeps ASLR applying. Restating either as a rustflag here would also apply it
+# to host builds, including the desktop crate's test harness, for no gain.
+# `scripts/verify-artifact.sh` asserts both properties on every packaged build,
+# so a changed default fails the release rather than shipping quietly.
+
+# No aarch64 cross toolchain is installed, and none is needed: nothing in the
+# dependency graph compiles C, so there is no foreign object to produce. rustc
+# links this itself with rust-lld against the musl start files and libc archive
+# that rust-std already ships, which is what `link-self-contained` selects.
+#
+# Everything below the first two flags is asking for a static PIE. On the
+# x86_64 host that is simply the default, but rustc only emits `-static-pie`
+# when it drives a `cc` linker driver; invoking a linker directly, as this must,
+# it emits neither `-pie` nor `--no-dynamic-linker` and the result is a plain
+# `ET_EXEC`. That still runs, so nothing would have complained except
+# scripts/verify-artifact.sh, which requires `ET_DYN` so that ASLR applies and
+# fails the release otherwise. The flags are in the linker's own spelling
+# because there is no `cc` in front of it to translate them.
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
 rustflags = [
+  "-C", "link-self-contained=yes",
+  "-C", "relocation-model=pic",
   "-C", "target-feature=+crt-static",
-  "-C", "link-arg=-static",
-  "-C", "link-arg=-Wl,--dynamicbase,--nxcompat,--high-entropy-va",
+  "-C", "link-arg=-pie",
+  "-C", "link-arg=--no-dynamic-linker",
+  "-C", "link-arg=-z", "-C", "link-arg=relro",
+  "-C", "link-arg=-z", "-C", "link-arg=now",
 ]
 
-[target.aarch64-unknown-linux-gnu]
-linker = "/usr/bin/aarch64-linux-gnu-gcc"
-rustflags = ["-C", "link-arg=-Wl,-z,relro,-z,now"]
-
-[target.aarch64-pc-windows-gnullvm]
-linker = "aarch64-w64-mingw32-clang"
+# The Windows package links with the MinGW GNU toolchain Alpine packages.
+#
+# It did not always. The GNU binutils Debian shipped for this target were 2.40,
+# which drops import descriptors when one DLL is imported through several of
+# them: the desktop binary imported kernel32 from four descriptors, three were
+# discarded, and the eighteen thunks they owned were left holding the
+# file-relative address of their own import name. The first call through one,
+# `GetModuleHandleA`, jumped to 0x7265c0 and 0.9.0 through 0.9.2 died with
+# 0xC0000005 before reaching `main`. 0.9.3 worked around it by linking with LLD
+# through `x86_64-pc-windows-gnullvm`, but llvm-mingw publishes no musl build,
+# so that toolchain cannot run on the Alpine toolbox at all.
+#
+# Alpine's binutils are 2.45, past the 2.44 release that emits the table
+# correctly, so the GNU linker is trustworthy here again. This is not taken on
+# faith: scripts/verify-artifact.sh fails the release unless every import
+# address table slot belongs to a descriptor, which is exactly the corruption
+# above, and it runs on every packaged build.
+#
+# LLD set the subsystem and OS versions to 6.00 without being asked. GNU ld
+# does not, so they are requested explicitly.
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
 rustflags = [
   "-C", "target-feature=+crt-static",
   "-C", "link-arg=-static",
   "-C", "link-arg=-Wl,--dynamicbase,--nxcompat,--high-entropy-va",
+  "-C", "link-arg=-Wl,--major-subsystem-version=6,--minor-subsystem-version=0",
+  "-C", "link-arg=-Wl,--major-os-version=6,--minor-os-version=0",
 ]

@@ -1,4 +1,6 @@
 .git
-artifacts
-target
+.env
 .cache
+artifacts
+coverage
+target

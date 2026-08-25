@@ -10,10 +10,23 @@ case ${package} in
         for binary in "${stage}"/bin/*; do
             file "${binary}" | grep -F 'ELF'
             readelf -h "${binary}" | grep -F "Machine:                           ${expected_machine}"
+            # Static-PIE: DYN keeps ASLR, and the absence of an interpreter and
+            # of any shared-library dependency is what lets one package run on
+            # every distribution rather than only on the musl one it was built
+            # against. A `+crt-static` build without `relocation-model=pic`
+            # would be EXEC and fail the first of these.
             readelf -h "${binary}" | grep -F 'DYN (Position-Independent Executable file)'
+            if readelf -W -l "${binary}" | grep -F 'INTERP'; then
+                echo "Dynamically linked interpreter in ${binary}" >&2
+                exit 1
+            fi
+            if readelf -d "${binary}" 2>/dev/null | grep -F '(NEEDED)'; then
+                echo "Shared library dependency in ${binary}" >&2
+                exit 1
+            fi
             readelf -W -l "${binary}" | grep -F 'GNU_RELRO'
             readelf -W -l "${binary}" | grep -E 'GNU_STACK.*RW '
-            if readelf -d "${binary}" | grep -E 'RPATH|RUNPATH'; then
+            if readelf -d "${binary}" 2>/dev/null | grep -E 'RPATH|RUNPATH'; then
                 echo "Forbidden runtime path in ${binary}" >&2
                 exit 1
             fi
@@ -23,10 +36,8 @@ case ${package} in
         fi
         ;;
     windows-*)
-        expected_machine=IMAGE_FILE_MACHINE_AMD64
-        if [[ ${package} == windows-arm64 ]]; then expected_machine=IMAGE_FILE_MACHINE_ARM64; fi
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F "Machine: ${expected_machine}"
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F "Machine: ${expected_machine}"
+        llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F "Machine: IMAGE_FILE_MACHINE_AMD64"
+        llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F "Machine: IMAGE_FILE_MACHINE_AMD64"
         llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_CUI'
         llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_GUI'
         # The GUI binary has no console, so it must carry the application
@@ -46,7 +57,9 @@ case ${package} in
         # of them and left the orphaned thunks holding the address of their own
         # import name, which the loader never overwrites. The first call through
         # one jumped into the import table, and 0.9.0 through 0.9.2 died with
-        # 0xC0000005 before reaching `main`.
+        # 0xC0000005 before reaching `main`. The toolbox now links with binutils
+        # 2.45, which emits the table correctly; this is the check that says so
+        # on every build rather than on trust.
         for binary in "${stage}"/bin/*.exe; do
             iat=$(llvm-readobj --file-headers "${binary}" | sed -n 's/.*IATSize: \(0x[0-9A-Fa-f]*\)$/\1/p')
             imports=$(llvm-readobj --coff-imports "${binary}")

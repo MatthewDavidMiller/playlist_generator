@@ -1,9 +1,11 @@
 # Playlist Generator
 
-Playlist Generator 0.9 is a pure-Rust desktop and command-line application for
-building shuffled UTF-8 `.m3u8` playlists and creating EBU R128-normalized Opus
-copies of audio libraries. Linux and Windows builds are produced locally; no
-remote publishing workflow is used.
+Playlist Generator 0.9 is a pure-Rust interactive and command-line application
+for building shuffled UTF-8 `.m3u8` playlists and creating EBU R128-normalized
+Opus copies of audio libraries. Windows gets a graphical desktop application;
+Linux gets a terminal application, statically linked so one build runs on every
+distribution. Both sit next to the same command-line program. Builds are
+produced locally; no hosted CI runner is used.
 
 ## Features
 
@@ -16,9 +18,11 @@ remote publishing workflow is used.
   metadata, excluding cover art, and leaving every source untouched.
 - Resumable output, collision detection, up to 32 fixed workers, per-file
   failure continuation, pause/resume, and whole-process-tree cancellation.
-- An adaptive `egui` desktop interface with Create Playlist, Normalize Volume,
-  Activity, and About pages, native asynchronous pickers, an explanation under
-  every control, and zoom controls.
+- An adaptive `egui` desktop interface on Windows with Create Playlist,
+  Normalize Volume, Activity, and About pages, native asynchronous pickers, an
+  explanation under every control, and zoom controls.
+- A `ratatui` terminal interface on Linux with the same four pages, the same
+  explanation under every control, and keyboard-driven pause, resume, and stop.
 - Human-readable CLI output or stable newline-delimited JSON for automation.
 
 FFmpeg is the only runtime prerequisite for normalization. Playlist creation
@@ -59,7 +63,7 @@ All emitted paths are absolute. Non-UTF-8 paths and paths containing CR or LF
 are rejected instead of being converted lossily. Because playlists disclose
 local paths, review them before sharing.
 
-## Desktop usage
+## Desktop usage (Windows)
 
 The desktop application coordinates one operation at a time. Each control is
 labelled in plain language and explained underneath, and the two starting pages
@@ -91,20 +95,39 @@ also when the window stops being hidden. A launch that fails reports the error
 in a message box and writes it there too. A missing file means the process
 never reached its own code.
 
+## Terminal usage (Linux)
+
+The terminal application has the same four pages and the same guidance under
+every control. `Tab` and `Shift+Tab` move between the boxes and the action
+button, `Enter` starts the run, and `Alt+1` through `Alt+4` — or `Alt+←` and
+`Alt+→` — change page. Quit is `Ctrl+Q`, deliberately modified so that it
+cannot be typed into a path.
+
+Paths are typed rather than picked: a terminal has no file dialog, and pulling
+one in would mean linking the desktop stack that keeps this build from being
+static. Starting a run opens Activity, which holds the progress bar, the counts,
+the bounded message history, and `p` to pause or resume and `s` to stop.
+Quitting during a run cancels it and waits for FFmpeg to be reaped and any
+incomplete temporary output to be removed. About holds the build version, the
+project link, and, folded away behind `l` and `n`, the license and third-party
+notices.
+
 ## Build from source
 
-Development is container-first and pinned to Rust 1.97.1. On a Linux host with
-rootless Podman (preferred) or Docker:
+Development is container-first and pinned to Rust 1.97.1. Docker with Compose
+v2 is the only prerequisite on either host — every compiler, linter, scanner,
+and test runner lives in the toolbox image.
 
 ```bash
-make install
-make gate
+./scripts/setup.sh
+docker compose run --rm gate
 ```
 
-`make install` builds the digest-pinned developer image, configures the tracked
-Git hook, and checks all required tools. It installs Podman with `dnf` or `apt`
-only when neither supported engine exists. Set `CONTAINER_ENGINE` to choose an
-engine explicitly.
+`scripts/setup.sh` builds the digest-pinned toolbox image, records the local
+uid so gates leave no root-owned files behind, installs the tracked Git hooks,
+and checks every required tool. On Windows there is no uid to map, so run
+`docker compose build` and `git config core.hooksPath .githooks` instead; the
+gate command is identical.
 
 Build and release details are in
 [docs/maintainer-guide.md](docs/maintainer-guide.md); validation scope is in

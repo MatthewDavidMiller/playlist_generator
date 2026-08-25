@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "${repo_root}"
+unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE GIT_PREFIX
+
+# A rebase, cherry-pick, revert, or merge replays commits one after another.
+# Packaging each one would turn a ten-commit rebase into ten cross-builds, and
+# the intermediate trees are not what anybody is releasing anyway.
+git_dir=$(git rev-parse --git-common-dir)
+for marker in rebase-merge rebase-apply sequencer MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD; do
+    if [[ -e "${git_dir}/${marker}" ]]; then
+        echo "Sequencer in progress (${marker}); skipping the packaging build."
+        exit 0
+    fi
+done
+
+# After the commit exists, so the version the packages record is the one that
+# was committed.
+exec docker compose run --rm build-release

@@ -804,7 +804,7 @@ mod tests {
         let mut harness = sized(DEFAULT, 1.0);
         harness.get_by_label("About").click();
         harness.run();
-        assert!(harness.query_by_label("Version 0.9.4").is_some());
+        assert!(harness.query_by_label("Version 0.9.5").is_some());
         assert!(harness.query_by_label("Project repository").is_some());
         assert!(harness.query_by_label(REPOSITORY).is_some());
     }
