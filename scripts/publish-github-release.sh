@@ -32,8 +32,9 @@ if ! gh auth status --hostname github.com >/dev/null 2>&1; then
 fi
 
 version=v$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
-if [[ ! ${version} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "ERROR: '${version}' is not a releasable vMAJOR.MINOR.PATCH version." >&2
+# A release candidate, vMAJOR.MINOR.PATCH-rc.N, is published as a pre-release.
+if [[ ! ${version} =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]]; then
+    echo "ERROR: '${version}' is not a releasable vMAJOR.MINOR.PATCH[-rc.N] version." >&2
     exit 1
 fi
 
@@ -85,7 +86,8 @@ for package in "${packages[@]}"; do
     for required in \
         "artifacts/${package}/LICENSE" \
         "artifacts/${package}/THIRD_PARTY_NOTICES.txt" \
-        "artifacts/${package}/playlist-generator.cdx.json"; do
+        "artifacts/${package}/playlist-generator.cdx.json" \
+        "artifacts/${package}/playlist-generator-web.cdx.json"; do
         if [[ ! -f ${required} || -L ${required} || ! -s ${required} ]]; then
             echo "ERROR: Release build did not produce ${required}." >&2
             exit 1
@@ -122,7 +124,7 @@ git push --atomic "${remote}" \
     "HEAD:refs/heads/${remote_branch}" "refs/tags/${version}"
 
 release_flags=(--verify-tag --generate-notes --title "${version}")
-if [[ ${version} =~ ^v0\. ]]; then
+if [[ ${version} =~ ^v0\. || ${version} == *-rc.* ]]; then
     release_flags+=(--prerelease)
 fi
 gh release create "${version}" \

@@ -239,13 +239,15 @@ the only script that runs on the host rather than in the toolbox: it needs the
 developer's authenticated `gh` and their push credentials, and the toolbox has
 neither. The builds it depends on still run in the container.
 
-It refuses a dirty worktree, a non-`vMAJOR.MINOR.PATCH` version, a tag that
+It refuses a dirty worktree, a version other than `vMAJOR.MINOR.PATCH` or a
+release candidate `vMAJOR.MINOR.PATCH-rc.N`, a tag that
 already points somewhere other than HEAD, and a detached HEAD or a branch with
 no upstream. It exits without rebuilding if the release already exists. Archives
 are built with fixed ownership, ordering, and timestamps so a retry is
 byte-reproducible, accompanied by `SHA256SUMS`. The branch and tag are pushed
 atomically, because the API cannot attach a release to a commit GitHub has not
-received.
+received. 0.x versions and release candidates are published as GitHub
+pre-releases.
 
 There is no hosted CI runner and nothing builds, tests, or releases off this
 machine.
