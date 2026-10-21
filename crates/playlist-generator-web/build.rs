@@ -1,8 +1,8 @@
 //! Embeds the Windows application manifest and version resource into the binary.
 //!
-//! The desktop binary is linked for the Windows GUI subsystem. Without a
-//! resource section Windows treats it as a pre-Vista application: it applies
-//! compatibility and UAC virtualisation shims, resolves DPI awareness late, and
+//! The web frontend is the executable people double-click on Windows. Without a
+//! resource section Windows treats it as a pre-Vista application and applies
+//! its compatibility shims, its console keeps the legacy code page, and
 //! `Explorer`, `SmartScreen`, and endpoint protection see an unnamed,
 //! unversioned executable. `windres` ships with the same MinGW toolchains that
 //! already provide the cross linkers, so no build dependency is added.
@@ -12,7 +12,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-const MANIFEST: &str = "windows/playlist-generator-gui.manifest";
+const MANIFEST: &str = "windows/playlist-generator-web.manifest";
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
@@ -51,7 +51,7 @@ fn embed_resource() {
     }
 
     // Only the executable needs the resource; the library is also built for the
-    // headless tests, which never link it.
+    // tests, which never link it.
     println!("cargo::rustc-link-arg-bins={}", object.display());
 }
 
@@ -107,9 +107,9 @@ FILETYPE 0x1L
       VALUE "CompanyName", "Matthew David Miller"
       VALUE "FileDescription", "Playlist Generator"
       VALUE "FileVersion", "{version}"
-      VALUE "InternalName", "playlist-generator-gui"
+      VALUE "InternalName", "playlist-generator-web"
       VALUE "LegalCopyright", "Copyright (c) Matthew David Miller. MIT licensed."
-      VALUE "OriginalFilename", "playlist-generator-gui.exe"
+      VALUE "OriginalFilename", "playlist-generator-web.exe"
       VALUE "ProductName", "Playlist Generator"
       VALUE "ProductVersion", "{version}"
     }}

@@ -34,7 +34,7 @@ The gate runs, in order:
 1. `scripts/doctor.sh`, so a drifted image fails immediately
 2. `cargo fmt --all -- --check`
 3. strict workspace/all-target Clippy
-4. strict Clippy for `playlist-generator-gui` against `x86_64-pc-windows-gnu`
+4. strict Clippy for `playlist-generator-web` against `x86_64-pc-windows-gnu`
 5. warning-free workspace rustdoc
 6. ShellCheck over scripts and both hooks
 7. all workspace tests with locked dependencies
@@ -77,13 +77,23 @@ process-group cancellation, normalization planning/resume/collisions,
 no-clobber persistence, fixed concurrency, monotonic progress, pause/cancel,
 stopped-result reporting, and deterministic per-file failures.
 
-Desktop tests use `egui_kittest` accessibility trees for top navigation,
-enabled states, Activity controls/logs, and About/legal content, and they
-assert layout geometry from the same trees: no control leaves the window at the
-minimum size, the default size, 150%/200% display scaling, or a full-screen
-width; the column stays centered and stops widening; the browse buttons reflow
-only when the column is tight. The crate is packaged for Windows only but still
-builds and tests on the toolbox host, so those assertions keep running.
+Web tests cover the same interaction surface without a browser. `http` tests
+parse raw requests: form and query decoding, cookies, bounded heads and bodies,
+and refusal of other methods, chunked bodies, bad escapes, and components that
+are not UTF-8; they also cover escaping and the headers every response
+carries. `server` tests call the router directly: the launch link setting the
+cookie and leaving the address bar, pages refused without it, a rebound host
+name refused even with it, cross-site posts refused, Browse… keeping what was
+typed and returning with the choice, the folder browser listing a real folder,
+starting a run moving to the page that reports it, and Quit. `pages` tests
+assert on the rendered HTML: every control and its guidance, the action button
+preceding the browse buttons so Enter presses it, typed paths escaped into
+their boxes, the navigation marking the open page, the forms locking and
+Activity refreshing only during a run, progress counts and newest-first
+messages, the legal documents folded behind their headings, and the browser
+offering each field only what it can use. `browse` tests list a temporary
+folder for every kind of field. One test drives the real server over loopback
+sockets from sign-in to Quit.
 
 Terminal tests cover the same interaction surface without a tty. `App` tests
 drive key events directly: cursor editing around multi-byte characters, focus
@@ -97,7 +107,8 @@ guidance text survives, the footer names the keys the current page honors,
 progress reports its counts, the log keeps its newest lines, the legal
 documents stay folded until asked for, and the cursor follows focus.
 
-No display, terminal, or FFmpeg is required by any test.
+No display, browser, terminal, or FFmpeg is required by any test; the web
+tests need only a loopback socket and the temporary directory.
 
 CLI behavior is currently covered only through `playlist-generator-core`; the
 `playlist-generator` binary itself has no tests of its command parsing or its
@@ -115,10 +126,11 @@ have the wrong architecture. The interpreter and `NEEDED` checks are what hold
 the packages to being statically linked, which is what lets one Linux package
 run on every distribution rather than only on musl ones.
 
-It rejects PE files with the wrong console/GUI subsystem, without ASLR, DEP, and
+It rejects PE files that are not console programs, without ASLR, DEP, and
 high entropy VA, with unexpected non-system runtime DLL dependencies, or whose
 import address table has slots belonging to no descriptor — the corruption that
 killed 0.9.0 through 0.9.2.
 
-Each platform directory must also contain both binaries, the repository
-license, generated notices, and a non-empty CycloneDX SBOM.
+Each platform directory must also contain the command-line and web binaries,
+the terminal binary on Linux, the repository license, generated notices, and a
+non-empty CycloneDX SBOM for each binary.

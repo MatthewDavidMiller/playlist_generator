@@ -38,10 +38,8 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 # links everything statically, and Alpine ships the archive separately from the
 # shared library. mingw-w64-gcc carries the Windows cross linker and
 # windres; its binutils is 2.45, which is why the Windows packages link with
-# the GNU linker again (see .cargo/config.toml). The X11, Wayland, mesa, and
-# dbus headers are a lint and test dependency, not a runtime one: the desktop
-# crate still compiles and runs its harness on the host even though it is only
-# packaged for Windows.
+# the GNU linker again (see .cargo/config.toml). No display headers are
+# needed: the graphical frontend is a web server built on the standard library.
 RUN apk add --no-cache \
         bash \
         binutils \
@@ -49,24 +47,19 @@ RUN apk add --no-cache \
         ca-certificates \
         coreutils \
         curl \
-        dbus-dev \
         diffutils \
         file \
         findutils \
         gawk \
         git \
         grep \
-        libx11-dev \
-        libxkbcommon-dev \
         llvm21 \
-        mesa-dev \
         mingw-w64-gcc \
         musl-dev \
         pkgconf \
         sed \
         shellcheck \
         tar \
-        wayland-dev \
         xz \
         zlib-dev \
         zlib-static

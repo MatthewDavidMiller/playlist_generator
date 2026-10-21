@@ -40,7 +40,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &App) {
     draw_footer(frame, app, footer);
 }
 
-/// Centre one column and cap its width, the way the desktop build caps its
+/// Centre one column and cap its width, the way the web frontend caps its
 /// form. A terminal stretched across a wide monitor otherwise puts the label
 /// and its value at opposite ends of the screen.
 fn centred(area: Rect) -> Rect {

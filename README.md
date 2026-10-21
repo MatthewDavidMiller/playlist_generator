@@ -1,11 +1,13 @@
 # Playlist Generator
 
-Playlist Generator 0.9 is a pure-Rust interactive and command-line application
+Playlist Generator 1.0 is a pure-Rust interactive and command-line application
 for building shuffled UTF-8 `.m3u8` playlists and creating EBU R128-normalized
-Opus copies of audio libraries. Windows gets a graphical desktop application;
-Linux gets a terminal application, statically linked so one build runs on every
-distribution. Both sit next to the same command-line program. Builds are
-produced locally; no hosted CI runner is used.
+Opus copies of audio libraries. Windows and Linux both get a graphical
+interface that runs in the local web browser, served by a small program on the
+computer itself; Linux also gets a terminal application. Every program is
+statically linked, so one Linux build runs on every distribution, and each sits
+next to the same command-line program. Builds are produced locally; no hosted
+CI runner is used.
 
 ## Features
 
@@ -18,9 +20,11 @@ produced locally; no hosted CI runner is used.
   metadata, excluding cover art, and leaving every source untouched.
 - Resumable output, collision detection, up to 32 fixed workers, per-file
   failure continuation, pause/resume, and whole-process-tree cancellation.
-- An adaptive `egui` desktop interface on Windows with Create Playlist,
-  Normalize Volume, Activity, and About pages, native asynchronous pickers, an
-  explanation under every control, and zoom controls.
+- A browser interface on Windows and Linux with Create Playlist, Normalize
+  Volume, Activity, and About pages, a built-in folder browser, and an
+  explanation under every control. It is served from 127.0.0.1 by a server
+  written in Rust on the standard library alone, uses no JavaScript, and
+  answers only the browser it opened.
 - A `ratatui` terminal interface on Linux with the same four pages, the same
   explanation under every control, and keyboard-driven pause, resume, and stop.
 - Human-readable CLI output or stable newline-delimited JSON for automation.
@@ -63,37 +67,46 @@ All emitted paths are absolute. Non-UTF-8 paths and paths containing CR or LF
 are rejected instead of being converted lossily. Because playlists disclose
 local paths, review them before sharing.
 
-## Desktop usage (Windows)
+## Web interface (Windows and Linux)
 
-The desktop application coordinates one operation at a time. Each control is
-labelled in plain language and explained underneath, and the two starting pages
-name what they read, what they write, and what they leave alone.
+Start `playlist-generator-web`; on Windows, double-click it. It opens a console
+window, listens on a free port on 127.0.0.1, prints the address, and opens that
+address in the default browser. `--port PORT` uses a fixed port instead, and
+`--no-browser` only prints the address. Nothing listens on any other network
+interface.
 
-Every page is one centered, scrollable column that stops widening at 620 points,
-so a maximized window and a half-screen window read the same. Widths are
-measured from that column rather than from the window, which is what keeps the
-layout correct under Windows display scaling: at 150% or 200% the same window
-reports fewer points, and the browse buttons move under their text boxes only
-when the column itself is genuinely too tight. Zoom in the status bar rescales
-everything on top of the display setting, which its tooltip reports.
+The printed address carries a secret that changes on every launch. Opening it
+signs that browser in, and the server refuses every other browser, other host
+names pointed at 127.0.0.1, and forms posted from other sites. An address from
+an earlier launch is refused, so open the one the console shows.
+
+The application coordinates one operation at a time. Each control is labelled
+in plain language and explained underneath, and the two starting pages name
+what they read, what they write, and what they leave alone. Every page is one
+centered column that stops widening at 620 pixels, so a maximized window and a
+half-screen window read the same; the browse buttons move under their text
+boxes only when that column is narrower than 430 pixels. The browser's own zoom
+scales everything, and the colors follow its light or dark setting.
+
+Paths can be typed, or chosen with Browse…, which lists the computer's folders
+and only the files the box can use: audio files for the repeated track,
+playlists for the output (or a folder and a file name to save as), and any file
+for FFmpeg. Windows lists its drives at the top level. Hidden entries and names
+that are not valid Unicode are not listed, because playlist paths cannot use
+the latter.
 
 Starting a run opens Activity, which holds progress, the counts, the bounded
-message history, and Pause, Resume, and Stop. Closing the window stops the
-FFmpeg process group and removes incomplete temporary output.
+message history with the newest first, and Pause, Resume, and Stop. It reloads
+itself every second while a run is in progress, and the forms are locked until
+it ends.
 
-The preferred first size is 960×640 points with a 420×320 minimum. The initial
-size only shrinks when needed to fit the monitor work area. About contains the
-build version, project link, and, folded away because they are thousands of
-lines, the repository license and the generated third-party notices.
-
-On Windows the desktop binary is linked for the GUI subsystem and has no
-console, so every launch rewrites
-`%LOCALAPPDATA%\PlaylistGenerator\startup.log` with how far it got: the version
-and executable path, `opening the window`, `window open` once the window and
-renderer exist, and `first frame` once something has been painted, which is
-also when the window stops being hidden. A launch that fails reports the error
-in a message box and writes it there too. A missing file means the process
-never reached its own code.
+Quit, at the bottom of every page, or Enter in the console window stops the
+program: a run in progress is cancelled first, FFmpeg is reaped, and any
+incomplete temporary output is removed. Closing the browser tab leaves it
+running. Ctrl+C or closing the console window ends it immediately without that
+cleanup, so prefer Quit while a run is in progress. About contains the build
+version, project link, and, folded away because they are thousands of lines,
+the repository license and the generated third-party notices.
 
 ## Terminal usage (Linux)
 
@@ -103,9 +116,8 @@ button, `Enter` starts the run, and `Alt+1` through `Alt+4` — or `Alt+←` and
 `Alt+→` — change page. Quit is `Ctrl+Q`, deliberately modified so that it
 cannot be typed into a path.
 
-Paths are typed rather than picked: a terminal has no file dialog, and pulling
-one in would mean linking the desktop stack that keeps this build from being
-static. Starting a run opens Activity, which holds the progress bar, the counts,
+Paths are typed rather than picked: a terminal has no file dialog. The web
+interface has a folder browser when one is wanted. Starting a run opens Activity, which holds the progress bar, the counts,
 the bounded message history, and `p` to pause or resume and `s` to stop.
 Quitting during a run cancels it and waits for FFmpeg to be reaped and any
 incomplete temporary output to be removed. About holds the build version, the

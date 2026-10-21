@@ -6,7 +6,7 @@ rustflags = ["-C", "link-arg=-Wl,-z,relro,-z,now"]
 # which is what the Linux packages need: static is what makes one package work
 # on every distribution rather than only on the toolbox's own, and PIE is what
 # keeps ASLR applying. Restating either as a rustflag here would also apply it
-# to host builds, including the desktop crate's test harness, for no gain.
+# to host builds, including the test harnesses, for no gain.
 # `scripts/verify-artifact.sh` asserts both properties on every packaged build,
 # so a changed default fails the release rather than shipping quietly.
 

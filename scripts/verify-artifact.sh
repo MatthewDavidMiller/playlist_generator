@@ -36,21 +36,23 @@ case ${package} in
         fi
         ;;
     windows-*)
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F "Machine: IMAGE_FILE_MACHINE_AMD64"
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F "Machine: IMAGE_FILE_MACHINE_AMD64"
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_CUI'
-        llvm-readobj --file-headers "${stage}/bin/playlist-generator-gui.exe" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_GUI'
-        # The GUI binary has no console, so it must carry the application
-        # manifest and version resource that keep Windows from treating it as a
-        # legacy executable.
-        gui=${stage}/bin/playlist-generator-gui.exe
-        llvm-readobj --sections "${gui}" | grep -F 'Name: .rsrc'
+        for binary in "${stage}"/bin/*.exe; do
+            llvm-readobj --file-headers "${binary}" | grep -F "Machine: IMAGE_FILE_MACHINE_AMD64"
+            # Both are console programs. The web frontend's console is where it
+            # prints its address and any fatal error, and closing it stops it.
+            llvm-readobj --file-headers "${binary}" | grep -F 'IMAGE_SUBSYSTEM_WINDOWS_CUI'
+        done
+        # The web frontend is the binary people double-click, so it must carry
+        # the application manifest and version resource that keep Windows from
+        # treating it as a legacy executable.
+        web=${stage}/bin/playlist-generator-web.exe
+        llvm-readobj --sections "${web}" | grep -F 'Name: .rsrc'
         # Not `grep -q`: it exits on the first match, `strings` takes SIGPIPE,
         # and `pipefail` fails the release with 141 depending on where in the
         # binary the match lands.
-        strings -a "${gui}" | grep -F 'requestedExecutionLevel' >/dev/null
-        strings -a "${gui}" | grep -F '{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}' >/dev/null
-        strings -a -el "${gui}" | grep -F 'playlist-generator-gui.exe' >/dev/null
+        strings -a "${web}" | grep -F 'requestedExecutionLevel' >/dev/null
+        strings -a "${web}" | grep -F '{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}' >/dev/null
+        strings -a -el "${web}" | grep -F 'playlist-generator-web.exe' >/dev/null
         # Every import address table slot must belong to a descriptor: one slot
         # per imported symbol, plus one null terminator per descriptor. Binutils
         # 2.40 dropped descriptors when a DLL was imported through more than one
@@ -85,4 +87,12 @@ case ${package} in
 esac
 test -s "${stage}/LICENSE"
 test -s "${stage}/THIRD_PARTY_NOTICES.txt"
-test -s "${stage}/playlist-generator.cdx.json"
+# Every package ships the command-line and web frontends, Linux packages the
+# terminal one too, and each binary has its own SBOM beside it.
+expected=(playlist-generator playlist-generator-web)
+suffix=.exe
+if [[ ${package} == linux-* ]]; then expected+=(playlist-generator-tui); suffix=; fi
+for binary in "${expected[@]}"; do
+    test -s "${stage}/bin/${binary}${suffix}"
+    test -s "${stage}/${binary}.cdx.json"
+done

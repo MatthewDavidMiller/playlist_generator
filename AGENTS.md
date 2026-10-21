@@ -19,11 +19,12 @@ Use repository documentation as the primary reference before changing code.
 - Update existing documentation sections rather than duplicating them.
 - Keep README user-facing and maintainer workflows in `docs/`.
 - Keep domain and OS-independent behavior in `playlist-generator-core`.
-- Keep frontend interaction testable: the desktop views composed from `egui`
-  state, the terminal views drawn from `App` state and asserted through
-  ratatui's test backend.
-- Package the desktop frontend for Windows and the terminal frontend for Linux.
-  Do not add a Linux desktop package: its stack cannot link statically.
+- Keep frontend interaction testable: the web pages rendered from `App` state
+  and asserted as HTML, the terminal views drawn from `App` state and asserted
+  through ratatui's test backend.
+- Package the web frontend for Windows and Linux and the terminal frontend for
+  Linux. Keep the web frontend on the standard library and
+  `playlist-generator-core` alone: no third-party crates and no JavaScript.
 - Keep all first-party application code safe Rust; do not weaken workspace
   warning, Clippy, dependency, license, or source policies.
 - Update tests, notices, and documentation with behavior, dependency, command,

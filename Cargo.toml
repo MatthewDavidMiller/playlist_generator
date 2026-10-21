@@ -3,12 +3,12 @@ resolver = "2"
 members = [
   "crates/playlist-generator-core",
   "crates/playlist-generator",
-  "crates/playlist-generator-gui",
   "crates/playlist-generator-tui",
+  "crates/playlist-generator-web",
 ]
 
 [workspace.package]
-version = "0.9.5"
+version = "1.0.0-rc.1"
 edition = "2024"
 license = "MIT"
 rust-version = "1.97.1"
@@ -17,22 +17,17 @@ rust-version = "1.97.1"
 atomic-write-file = "0.3.0"
 clap = { version = "=4.6.6", features = ["derive"] }
 command-group = "=5.0.1"
-# The Linux frontend's terminal layer. Terminal I/O is read, write, and ioctl
-# on file descriptors, so unlike the egui stack these dlopen nothing and the
-# Linux packages link fully static -- one binary for every distribution.
+# The terminal frontend's layer. Terminal I/O is read, write, and ioctl on file
+# descriptors, so these dlopen nothing and the Linux packages link fully
+# static -- one binary for every distribution.
 # crossterm keeps its default features: `events` is the keyboard input the
 # whole frontend is driven by.
 crossterm = "=0.29.0"
-eframe = { version = "=0.36.1", default-features = false, features = ["accesskit", "default_fonts", "glow"] }
-egui = "=0.36.1"
-egui_kittest = { version = "=0.36.1", features = ["eframe", "snapshot"] }
 num_cpus = "1.17.0"
-pollster = "0.4.0"
 # 0.29 depends on `paste`, which is unmaintained per RUSTSEC-2024-0436; 0.30
 # dropped it, so staying current here avoids carrying an advisory exemption.
 ratatui = { version = "=0.30.2", default-features = false, features = ["crossterm"] }
 rand = "0.10.0"
-rfd = { version = "=0.17.2", default-features = false }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 signal-hook = "0.3.18"

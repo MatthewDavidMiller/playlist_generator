@@ -13,7 +13,7 @@
 # image, so that door stays shut.
 
 x-toolbox: &toolbox
-  image: playlist-generator-dev:0.9.5
+  image: playlist-generator-dev:1.0.0-rc.1
   build:
     context: .
     dockerfile: Containerfile

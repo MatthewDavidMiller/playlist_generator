@@ -1,0 +1,183 @@
+/* One centered column that stops widening at 620px, so a maximized window and
+   a half-screen window read the same. The browser's own zoom scales it. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1c1f24;
+  --muted: #5b6370;
+  --border: #c9ced6;
+  --accent: #2557c7;
+  --accent-text: #ffffff;
+  --notice: #fff4d6;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --surface: #1f2228;
+    --text: #e6e8eb;
+    --muted: #a0a7b2;
+    --border: #3a3f48;
+    --accent: #7aa2ff;
+    --accent-text: #0d1117;
+    --notice: #3a3220;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+a { color: var(--accent); }
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs a {
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.tabs a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.form {
+  flex: 1;
+  width: 100%;
+  max-width: 652px;
+  margin: 0 auto;
+  padding: 16px;
+  container-type: inline-size;
+}
+
+h1 { font-size: 1.5rem; margin: 8px 0; }
+h2 { font-size: 1.1rem; margin: 20px 0 8px; }
+.intro { margin: 0 0 16px; }
+
+fieldset {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.control { margin-bottom: 16px; }
+.control label, .save label { display: block; font-weight: 600; margin-bottom: 4px; }
+.help { margin: 4px 0 0; font-size: 0.875rem; color: var(--muted); }
+
+.row { display: flex; gap: 8px; }
+.row input { flex: 1; min-width: 0; }
+
+/* Below this column width the browse button moves under its text box. */
+@container (max-width: 430px) {
+  .row { flex-direction: column; }
+}
+
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sentence input { width: 6em; }
+
+input, button {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.6; }
+input:disabled { opacity: 0.6; }
+
+/* Written first in the form so Enter presses it; shown last. */
+button.primary {
+  order: 99;
+  width: 100%;
+  padding: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.notice {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--notice);
+}
+
+.progress progress { width: 100%; height: 1.25rem; }
+.progress p { margin: 4px 0; }
+.controls { display: flex; gap: 8px; margin: 12px 0; }
+
+.log {
+  margin: 0;
+  padding: 8px 12px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.log li + li { border-top: 1px solid var(--border); }
+
+.where code { overflow-wrap: anywhere; }
+.crumbs { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; }
+.save { margin-bottom: 8px; }
+.save button.primary { width: auto; }
+
+.entries { margin: 0; padding: 0; list-style: none; }
+.entries li { border-bottom: 1px solid var(--border); }
+.entries a, .entries button.entry {
+  display: block;
+  width: 100%;
+  padding: 6px 4px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.entries a.folder::after { content: " ›"; color: var(--muted); }
+.entries form { margin: 0; }
+
+details { margin: 12px 0; }
+summary { cursor: pointer; font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8rem; }
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.status form { margin: 0; }

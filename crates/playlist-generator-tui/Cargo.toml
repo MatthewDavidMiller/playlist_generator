@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 crossterm.workspace = true
-playlist-generator-core = { version = "=0.9.5", path = "../playlist-generator-core" }
+playlist-generator-core = { version = "=1.0.0-rc.1", path = "../playlist-generator-core" }
 ratatui.workspace = true
 
 [lints]

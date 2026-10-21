@@ -1,13 +1,12 @@
 #![forbid(unsafe_code)]
 
-//! The Linux desktop frontend.
+//! The terminal frontend, packaged for Linux.
 //!
-//! The graphical build is packaged for Windows only. Its stack dlopens libX11,
-//! libwayland, and libGL, so it cannot be linked statically, and a dynamically
-//! linked musl binary would run on the toolbox's own distribution and nowhere
-//! else. A terminal is read, write, and ioctl on file descriptors, which
-//! resolves nothing at run time, so this build is one static binary that works
-//! on every distribution.
+//! The graphical frontend is the browser interface `playlist-generator-web`
+//! serves. This one is for machines with no browser at hand, such as a server
+//! reached over SSH. A terminal is read, write, and ioctl on file descriptors,
+//! which resolves nothing at run time, so this build is one static binary that
+//! works on every distribution.
 
 mod app;
 mod ui;

@@ -1,0 +1,20 @@
+[package]
+name = "playlist-generator-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+# Nothing but the standard library and core. The HTTP server, the HTML, the
+# folder browser, and the browser launch are all first-party, which is what
+# lets this one frontend ship statically linked on Linux and on Windows alike.
+[dependencies]
+playlist-generator-core = { version = "=1.0.0-rc.1", path = "../playlist-generator-core" }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "playlist-generator-web"
+path = "src/main.rs"
