@@ -6,9 +6,8 @@ This is the validation source of truth. Product behavior is in
 
 ## Validation commands
 
-Docker with Compose v2 is the only prerequisite. Every compiler, linter,
-scanner, and test runner lives in the toolbox image, so the commands below are
-the same on Windows and Linux.
+Rootless Podman is the only prerequisite; on Windows, run these from WSL.
+Every compiler, linter, scanner, and test runner lives in the toolbox image.
 
 Bootstrap the image and the tracked hooks once:
 
@@ -16,17 +15,17 @@ Bootstrap the image and the tracked hooks once:
 ./scripts/setup.sh
 ```
 
-On Windows, where there is no uid to map, do the same two steps directly:
+The two steps it performs, if you want them directly:
 
-```powershell
-docker compose build
+```bash
+./scripts/toolbox.sh --build
 git config core.hooksPath .githooks
 ```
 
 Run the complete pre-commit acceptance gate:
 
 ```bash
-docker compose run --rm gate
+./scripts/toolbox.sh gate
 ```
 
 The gate runs, in order:
@@ -46,17 +45,17 @@ The gate runs, in order:
 Focused services are:
 
 ```bash
-docker compose run --rm lint
-docker compose run --rm test
-docker compose run --rm coverage
-docker compose run --rm security
-docker compose run --rm notices
-docker compose run --rm build-linux
-docker compose run --rm build-windows
-docker compose run --rm shell
+./scripts/toolbox.sh lint
+./scripts/toolbox.sh test
+./scripts/toolbox.sh coverage
+./scripts/toolbox.sh security
+./scripts/toolbox.sh notices
+./scripts/toolbox.sh build-linux
+./scripts/toolbox.sh build-windows
+./scripts/toolbox.sh shell
 ```
 
-Coverage HTML is produced by `cargo llvm-cov`. `docker compose run --rm
+Coverage HTML is produced by `cargo llvm-cov`. `./scripts/toolbox.sh
 release-all` adds the Linux ARM64 package and is the full release acceptance
 command; `scripts/publish-github-release.sh` runs it before publishing.
 
@@ -64,7 +63,7 @@ Rebuild the image after any change to `Containerfile` or
 `scripts/install-trivy.sh`:
 
 ```bash
-docker compose build
+./scripts/toolbox.sh --build
 ```
 
 ## Test scope

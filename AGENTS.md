@@ -10,7 +10,7 @@ Use repository documentation as the primary reference before changing code.
 3. [docs/testing.md](docs/testing.md) for validation commands and test scope.
 4. [Cargo.toml](Cargo.toml), [Cargo.lock](Cargo.lock),
    [rust-toolchain.toml](rust-toolchain.toml), [Containerfile](Containerfile),
-   [compose.yaml](compose.yaml), [deny.toml](deny.toml), and
+   [scripts/toolbox.sh](scripts/toolbox.sh), [deny.toml](deny.toml), and
    [supply-chain/config.toml](supply-chain/config.toml) as tooling sources of
    truth.
 

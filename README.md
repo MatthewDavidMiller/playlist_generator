@@ -126,20 +126,18 @@ notices.
 
 ## Build from source
 
-Development is container-first and pinned to Rust 1.97.1. Docker with Compose
-v2 is the only prerequisite on either host — every compiler, linter, scanner,
-and test runner lives in the toolbox image.
+Development is container-first and pinned to Rust 1.97.1. Rootless
+Podman is the only prerequisite (on Windows, run it from WSL) — every compiler,
+linter, scanner, and test runner lives in the toolbox image.
 
 ```bash
 ./scripts/setup.sh
-docker compose run --rm gate
+./scripts/toolbox.sh gate
 ```
 
-`scripts/setup.sh` builds the digest-pinned toolbox image, records the local
-uid so gates leave no root-owned files behind, installs the tracked Git hooks,
-and checks every required tool. On Windows there is no uid to map, so run
-`docker compose build` and `git config core.hooksPath .githooks` instead; the
-gate command is identical.
+`scripts/setup.sh` builds the digest-pinned toolbox image, installs the tracked
+Git hooks, and checks every required tool. Gates run as your uid
+(`--userns=keep-id`), so they leave no root-owned files behind.
 
 Build and release details are in
 [docs/maintainer-guide.md](docs/maintainer-guide.md); validation scope is in

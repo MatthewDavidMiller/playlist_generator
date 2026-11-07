@@ -1,6 +1,6 @@
 # The gate toolbox: every compiler, linter, scanner, and test runner the
-# repository gates depend on, so a workstation needs nothing but Docker.
-# compose.yaml runs the gates inside this image.
+# repository gates depend on, so a workstation needs nothing but rootless Podman.
+# scripts/toolbox.sh runs the gates inside this image.
 #
 # The base is the official Alpine image, pinned by digest. Alpine is what keeps
 # the supply chain short: nearly everything below arrives as an apk-signed
@@ -8,12 +8,12 @@
 # static Linux packages a native build instead of a cross-compile.
 #
 # This image is a developer tool, not a shipped artifact: it is never published
-# and never serves traffic. It declares no USER on purpose -- compose.yaml
+# and never serves traffic. It declares no USER on purpose -- scripts/toolbox.sh
 # supplies the uid at run time, the invoking user's, so a gate leaves no
 # root-owned files in the tree, and that uid is not known when the image is
 # built. .trivyignore records that as a scoped exception rather than silencing
 # the rule everywhere.
-ARG ALPINE_DIGEST=sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+ARG ALPINE_DIGEST=sha256:5c216c9767869f6ec7c4718977601d52f087c5c7bf2fdfb198e403f6b48ec40d
 
 FROM docker.io/library/alpine@${ALPINE_DIGEST}
 
@@ -98,7 +98,7 @@ COPY scripts/install-trivy.sh /tmp/install-trivy.sh
 RUN /tmp/install-trivy.sh && rm /tmp/install-trivy.sh
 
 # /cargo is world-writable because the container runs as whichever uid invoked
-# it, and the registry cache lives there on a named volume compose.yaml mounts,
+# it, and the registry cache lives there on a named volume scripts/toolbox.sh mounts,
 # so downloads survive between gate runs. The git setting is for the
 # bind-mounted repository, which looks foreign-owned to a mapped user; several
 # gates call git.

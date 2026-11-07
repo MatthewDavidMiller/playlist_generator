@@ -79,7 +79,7 @@ if git show-ref --verify --quiet "refs/tags/${version}" \
 fi
 
 echo "=== Local release build: ${version} from ${head_commit:0:12} ==="
-docker compose run --rm release-all
+./scripts/toolbox.sh release-all
 
 packages=(linux-x64 linux-arm64 windows-x64)
 for package in "${packages[@]}"; do

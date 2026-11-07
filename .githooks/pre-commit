@@ -6,5 +6,5 @@ cd "${repo_root}"
 # Tests build throwaway repositories of their own. Left set, these would make
 # every git call inside one resolve against the index being committed here.
 unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE GIT_PREFIX
-# One container for the whole gate rather than one per stage.
-exec docker compose run --rm gate
+# One container for the whole gate rather than one per stage, under rootless Podman.
+exec ./scripts/toolbox.sh gate

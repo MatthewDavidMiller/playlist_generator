@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 1.0.0-rc.1 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 1.0.0-rc.2 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-web ─┐   (packaged for Windows and Linux)
@@ -161,18 +161,18 @@ Three things cannot:
   [`scripts/install-trivy.sh`](../scripts/install-trivy.sh) — pinned to a
   version and a SHA-256 together, so a replaced asset fails the build.
 
-[`compose.yaml`](../compose.yaml) is the only entry point, and it is the same
-one on Windows and Linux. Every gate is a service. Services run as the invoking
-uid, mount no engine socket, drop all capabilities, enable
-`no-new-privileges`, and apply process and memory bounds. The Cargo registry
+[`scripts/toolbox.sh`](../scripts/toolbox.sh) is the only entry point, and it
+needs only rootless Podman (Windows runs it from WSL). Every gate is a named
+subcommand. Gates run as the invoking uid (`--userns=keep-id`), mount no engine
+socket, drop all capabilities, enable `no-new-privileges`, and apply process
+and memory bounds. The image is tagged with a digest of the Containerfile and
+the Trivy installer, so a changed pin rebuilds it on the next run. The Cargo registry
 cache is a named volume; the build tree is left at its default `target/` so
 that a gate's output is where a developer expects to find it.
 
-`scripts/setup.sh` writes the git-ignored `.env` holding that uid, builds the
-image, and installs the hooks. Windows needs no uid mapping and runs
-`docker compose build` and `git config core.hooksPath .githooks` directly.
+`scripts/setup.sh` builds the image, installs the hooks, and runs the doctor.
 
-Authoritative services are `gate`, `lint`, `test`, `coverage`, `security`,
+Authoritative gates are `gate`, `lint`, `test`, `coverage`, `security`,
 `notices`, `doctor`, `build-linux`, `build-windows`, `build-release`,
 `release-all`, `clean`, and `shell`. Exact commands and order are documented in
 [testing.md](testing.md#validation-commands).
@@ -203,16 +203,16 @@ rejected by policy. After changing dependencies:
 3. Update cargo-vet exemptions/audits deliberately, with
    `cargo vet add-exemption <crate> <version> --criteria safe-to-deploy` for
    each one rather than regenerating the file wholesale.
-4. Run `docker compose run --rm notices` and review the generated legal text.
+4. Run `./scripts/toolbox.sh notices` and review the generated legal text.
    `about.toml` lists the release triples, so a new target needs that list
    updated first or the notices will not describe what is shipped.
-5. Run `docker compose run --rm gate`.
+5. Run `./scripts/toolbox.sh gate`.
 
 Do not hand-edit generated notices.
 
 ## Local releases
 
-`docker compose run --rm build-release` builds and verifies Linux x64 and
+`./scripts/toolbox.sh build-release` builds and verifies Linux x64 and
 Windows x64. Linux ARM64 is outside the commit hook; `release-all` adds it.
 
 Each `artifacts/<platform>/` package contains the command-line and web binaries

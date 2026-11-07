@@ -18,4 +18,4 @@ done
 
 # After the commit exists, so the version the packages record is the one that
 # was committed.
-exec docker compose run --rm build-release
+exec ./scripts/toolbox.sh build-release
