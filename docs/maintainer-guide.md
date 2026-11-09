@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 1.0.0-rc.3 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 1.0.0-rc.4 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-web ─┐   (packaged for Windows and Linux)
