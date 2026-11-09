@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "clap",
  "playlist-generator-core",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-core"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "atomic-write-file",
  "command-group",
@@ -668,7 +668,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-tui"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "crossterm",
  "playlist-generator-core",
@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "playlist-generator-web"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "playlist-generator-core",
 ]

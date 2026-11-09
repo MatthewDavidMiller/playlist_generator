@@ -34,5 +34,3 @@ Use repository documentation as the primary reference before changing code.
   builds, tests, or releases off this machine. Releases are cut by
   `scripts/publish-github-release.sh`, which runs the containerized builds
   locally and then uses the developer's own authenticated `gh`.
-- Do not add a `Co-Authored-By` trailer or other AI/tool attribution to commit
-  messages. The repository owner is the only recorded author.

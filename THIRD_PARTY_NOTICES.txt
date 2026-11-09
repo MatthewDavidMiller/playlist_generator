@@ -2379,7 +2379,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 --------------------------------------------------------------------------------
 License: MIT License
-Used by: playlist-generator 1.0.0-rc.2, playlist-generator-core 1.0.0-rc.2, playlist-generator-tui 1.0.0-rc.2, playlist-generator-web 1.0.0-rc.2
+Used by: playlist-generator 1.0.0-rc.3, playlist-generator-core 1.0.0-rc.3, playlist-generator-tui 1.0.0-rc.3, playlist-generator-web 1.0.0-rc.3
 
 MIT License
 

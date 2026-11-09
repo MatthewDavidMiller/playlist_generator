@@ -5,7 +5,7 @@ covers architecture, supply-chain policy, hooks, and local releases.
 
 ## Architecture
 
-The Rust 2024 workspace is versioned at 1.0.0-rc.2 and pinned to Rust 1.97.1:
+The Rust 2024 workspace is versioned at 1.0.0-rc.3 and pinned to Rust 1.97.1:
 
 ```text
 playlist-generator-web ─┐   (packaged for Windows and Linux)
@@ -244,10 +244,20 @@ release candidate `vMAJOR.MINOR.PATCH-rc.N`, a tag that
 already points somewhere other than HEAD, and a detached HEAD or a branch with
 no upstream. It exits without rebuilding if the release already exists. Archives
 are built with fixed ownership, ordering, and timestamps so a retry is
-byte-reproducible, accompanied by `SHA256SUMS`. The branch and tag are pushed
+byte-reproducible apart from the Windows signatures, accompanied by
+`SHA256SUMS`. The branch and tag are pushed
 atomically, because the API cannot attach a release to a commit GitHub has not
 received. 0.x versions and release candidates are published as GitHub
 pre-releases.
+
+The Windows executables are signed on the host, after the container build and
+`verify-artifact.sh` and before the archives are made, by
+[`scripts/codesign.sh`](../scripts/codesign.sh) with `osslsigncode`. The key is
+the personal self-signed code-signing key in `~/.config/code-signing/`; it is
+never in this repository, and the toolbox never sees it. Each signature is
+verified and timestamped, and the signed files are what `SHA256SUMS` covers.
+Windows trusts the signature on a machine that has imported the matching public
+certificate (`certs/matt-code-signing.cer` in the `windows-config` repository).
 
 There is no hosted CI runner and nothing builds, tests, or releases off this
 machine.

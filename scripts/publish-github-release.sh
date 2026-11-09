@@ -95,6 +95,18 @@ for package in "${packages[@]}"; do
     done
 done
 
+# Sign the Windows executables with the personal code-signing key. This runs on
+# the host because the key lives outside the repository and the toolbox never
+# sees it. The container build and verify-artifact.sh have already checked the
+# unsigned files; each signature is verified before it replaces its executable.
+command -v osslsigncode >/dev/null 2>&1 || {
+    echo "ERROR: osslsigncode is required to sign the Windows executables." >&2
+    exit 1
+}
+for exe in artifacts/windows-x64/bin/*.exe; do
+    ./scripts/codesign.sh "${exe}" "$(basename -- "${exe}" .exe)"
+done
+
 release_dir="artifacts/github-release/${version}"
 rm -rf -- "${release_dir}"
 mkdir -p -- "${release_dir}"
